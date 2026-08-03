@@ -1,0 +1,34 @@
+# compiled output
+/dist
+/node_modules
+/build
+*.tsbuildinfo
+
+# logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.local
+.env.*.local
+
+# tests
+/coverage
+/.nyc_output
+
+# IDE
+/.idea
+/.vscode
+*.swp
+.DS_Store
+
+# docker volumes
+/.docker-data
+
+openapi
+postman
