@@ -1,4 +1,10 @@
-import { toTrimmed, toUpperTrimmed } from '../../../common/transformers/transform.helpers';
+import {
+    toBoolean,
+    toJsonObject,
+    toStringArray,
+    toTrimmed,
+    toUpperTrimmed,
+} from '../../../common/transformers/transform.helpers';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -18,6 +24,7 @@ import {
     MinLength,
 } from 'class-validator';
 import { SLUG_MESSAGE, SLUG_RULE } from '../../categories/dto/create-category.dto';
+import { MAX_IMAGES_PER_REQUEST } from '../../uploads/constants/upload.constants';
 import { ProductStatus } from '../entities/product.entity';
 
 export class CreateProductDto {
@@ -87,22 +94,51 @@ export class CreateProductDto {
     @IsOptional()
     lowStockThreshold?: number;
 
-    @ApiPropertyOptional({ example: 'https://cdn.dcomputer.local/products/dell-vostro-3520.jpg' })
+    @ApiPropertyOptional({
+        example: 'https://cdn.dcomputer.local/products/dell-vostro-3520.jpg',
+        description: 'URL ảnh có sẵn — bị ghi đè nếu gửi kèm `thumbnailFile`.',
+    })
     @IsUrl()
     @MaxLength(500)
     @IsOptional()
     thumbnail?: string;
 
+    /**
+     * Field Swagger-only cho multipart: multer tách khỏi body trước khi tới ValidationPipe
+     * nên luôn `undefined` ở đây. `@IsOptional()` chỉ để đăng ký field với class-validator —
+     * thiếu nó thì `forbidNonWhitelisted` sẽ reject mọi request (kể cả JSON không hề gửi field này),
+     * vì target ES2023 khiến field không-initializer vẫn thành own-property `undefined`.
+     */
+    @ApiPropertyOptional({
+        type: 'string',
+        format: 'binary',
+        description: 'Upload ảnh thumbnail trực tiếp lên R2, thay vì truyền URL ở `thumbnail`.',
+    })
+    @IsOptional()
+    thumbnailFile?: unknown;
+
     @ApiPropertyOptional({
         type: [String],
         example: ['https://cdn.dcomputer.local/products/dell-vostro-3520-1.jpg'],
+        description: 'URL ảnh có sẵn — gộp thêm với ảnh upload qua `imagesFiles` (nếu có).',
     })
+    @Transform(toStringArray)
     @IsArray()
     @IsUrl({}, { each: true })
     @IsOptional()
     images?: string[];
 
+    /** Field Swagger-only cho multipart — xem lý do cần `@IsOptional()` ở `thumbnailFile`. */
+    @ApiPropertyOptional({
+        type: 'array',
+        items: { type: 'string', format: 'binary' },
+        description: `Upload ảnh sản phẩm trực tiếp lên R2 (tối đa ${MAX_IMAGES_PER_REQUEST} file), gộp thêm vào \`images\`.`,
+    })
+    @IsOptional()
+    imagesFiles?: unknown;
+
     @ApiPropertyOptional({ example: { CPU: 'Intel Core i5-1235U', RAM: '16GB DDR4' } })
+    @Transform(toJsonObject)
     @IsObject()
     @IsOptional()
     specifications?: Record<string, string>;
@@ -113,6 +149,7 @@ export class CreateProductDto {
     status?: ProductStatus;
 
     @ApiPropertyOptional({ default: false })
+    @Transform(toBoolean)
     @IsBoolean()
     @IsOptional()
     isFeatured?: boolean;

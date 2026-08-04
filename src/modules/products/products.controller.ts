@@ -1,4 +1,5 @@
 import {
+    applyDecorators,
     Body,
     Controller,
     Delete,
@@ -10,20 +11,43 @@ import {
     Patch,
     Post,
     Query,
+    UploadedFiles,
+    UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
 import { PermissionCode } from '../../common/enums/permission.enum';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
+import { MAX_IMAGES_PER_REQUEST } from '../uploads/constants/upload.constants';
+import { buildImageMulterOptions } from '../uploads/multer-options';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
+import type { ProductImageFiles } from './products.service';
 import { ProductsService } from './products.service';
+
+/** Multer field cho `thumbnailFile`/`imagesFiles` + khai multipart cho Swagger — dùng chung create/update. */
+const UploadProductImages = (): MethodDecorator =>
+    applyDecorators(
+        UseInterceptors(
+            FileFieldsInterceptor(
+                [
+                    { name: 'thumbnailFile', maxCount: 1 },
+                    { name: 'imagesFiles', maxCount: MAX_IMAGES_PER_REQUEST },
+                ],
+                buildImageMulterOptions(MAX_IMAGES_PER_REQUEST + 1),
+            ),
+        ),
+        ApiConsumes('multipart/form-data'),
+    );
+
+type UploadedProductFiles = Partial<Record<'thumbnailFile' | 'imagesFiles', Express.Multer.File[]>>;
 
 @ApiTags('Products')
 @Controller('products')
@@ -63,21 +87,35 @@ export class ProductsController {
     @Post()
     @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
     @LogActivity({ action: ActivityAction.CREATE, resource: 'product' })
-    @ApiOperation({ summary: 'Tạo sản phẩm' })
-    create(@Body() dto: CreateProductDto): Promise<Product> {
-        return this.productsService.create(dto);
+    @UploadProductImages()
+    @ApiOperation({
+        summary: 'Tạo sản phẩm',
+        description:
+            'thumbnail/images nhận URL có sẵn; gửi kèm thumbnailFile/imagesFiles (multipart) để upload thẳng lên R2 trong cùng request.',
+    })
+    create(
+        @Body() dto: CreateProductDto,
+        @UploadedFiles() files?: UploadedProductFiles,
+    ): Promise<Product> {
+        return this.productsService.create(dto, this.toImageFiles(files));
     }
 
     @ApiBearerAuth()
     @Patch(':id')
     @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
     @LogActivity({ action: ActivityAction.UPDATE, resource: 'product' })
-    @ApiOperation({ summary: 'Cập nhật sản phẩm' })
+    @UploadProductImages()
+    @ApiOperation({
+        summary: 'Cập nhật sản phẩm',
+        description:
+            'Không gửi thumbnail/thumbnailFile/images/imagesFiles thì giữ nguyên ảnh hiện có.',
+    })
     update(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() dto: UpdateProductDto,
+        @UploadedFiles() files?: UploadedProductFiles,
     ): Promise<Product> {
-        return this.productsService.update(id, dto);
+        return this.productsService.update(id, dto, this.toImageFiles(files));
     }
 
     @ApiBearerAuth()
@@ -100,5 +138,13 @@ export class ProductsController {
     @ApiOperation({ summary: 'Xoá mềm sản phẩm' })
     remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
         return this.productsService.remove(id);
+    }
+
+    /** `FileFieldsInterceptor` trả `{ field: File[] }` — rút gọn về hình dạng service cần. */
+    private toImageFiles(files?: UploadedProductFiles): ProductImageFiles {
+        return {
+            thumbnailFile: files?.thumbnailFile?.[0],
+            imagesFiles: files?.imagesFiles,
+        };
     }
 }

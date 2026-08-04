@@ -40,6 +40,47 @@ export const toUpperCase = ({ value }: TransformFnParams): unknown => {
     return typeof raw === 'string' ? raw.toUpperCase() : raw;
 };
 
+/** Form-data chỉ gửi được chuỗi: hỗ trợ cả repeated field và JSON array string. */
+export const toStringArray = ({ value }: TransformFnParams): unknown => {
+    const raw: unknown = value;
+    if (raw === undefined || raw === null || raw === '') return undefined;
+
+    const parseParts = (parts: unknown[]): string[] =>
+        parts
+            .filter((part): part is string => typeof part === 'string')
+            .map((part) => part.trim())
+            .filter((part) => part.length > 0);
+
+    if (Array.isArray(raw)) return parseParts(raw);
+
+    if (typeof raw !== 'string') return raw;
+
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+
+    try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parseParts(parsed);
+    } catch {
+        // Không phải JSON array thì coi là một phần tử đơn.
+    }
+
+    return [trimmed];
+};
+
+/** Form-data nhận object dưới dạng JSON string, JSON body thì giữ nguyên. */
+export const toJsonObject = ({ value }: TransformFnParams): unknown => {
+    const raw: unknown = value;
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    if (typeof raw !== 'string') return raw;
+
+    try {
+        return JSON.parse(raw) as unknown;
+    } catch {
+        return raw;
+    }
+};
+
 /**
  * Query nhiều giá trị trong 1 param, phân tách bằng `|` (vd `roleCode=staff|admin`)
  * -> mảng chữ thường, đã trim, bỏ phần tử rỗng. Giữ nguyên nếu đã là mảng (client

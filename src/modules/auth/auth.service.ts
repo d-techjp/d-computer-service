@@ -153,7 +153,7 @@ export class AuthService {
             throw new UnauthorizedException('Phiên đăng nhập đã kết thúc, vui lòng đăng nhập lại');
         }
         if (currentVersion !== payload.ver) {
-            throw new UnauthorizedException('Token đã bị thu hồi, vui lòng đăng nhập lại');
+            throw new UnauthorizedException('Phiên đăng nhập hết hạn, vui lòng đăng nhập lại');
         }
     }
 

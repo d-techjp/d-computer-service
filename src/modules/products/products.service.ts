@@ -8,6 +8,8 @@ import { PaginatedResult } from '../../common/dto/paginated-result.dto';
 import { slugify } from '../../common/utils/slug.util';
 import { BrandsService } from '../brands/brands.service';
 import { CategoriesService } from '../categories/categories.service';
+import { UploadFolder } from '../uploads/constants/upload.constants';
+import { UploadsService } from '../uploads/uploads.service';
 import { ProductsRepository } from './domain/products.repository';
 import type { CreateProductDto } from './dto/create-product.dto';
 import type { QueryProductDto } from './dto/query-product.dto';
@@ -16,21 +18,30 @@ import { Product, ProductStatus } from './entities/product.entity';
 
 const LOW_STOCK_LIMIT = 50;
 
+export interface ProductImageFiles {
+    thumbnailFile?: Express.Multer.File;
+    imagesFiles?: Express.Multer.File[];
+}
+
 @Injectable()
 export class ProductsService {
     constructor(
         private readonly productsRepository: ProductsRepository,
         private readonly categoriesService: CategoriesService,
         private readonly brandsService: BrandsService,
+        private readonly uploadsService: UploadsService,
     ) {}
 
-    async create(dto: CreateProductDto): Promise<Product> {
+    async create(dto: CreateProductDto, files?: ProductImageFiles): Promise<Product> {
         await this.assertSkuAvailable(dto.sku);
         await this.assertRelationsExist(dto.categoryId, dto.brandId);
         this.assertPriceConsistent(dto.price, dto.compareAtPrice);
 
+        const { thumbnail, images } = await this.resolveImages(dto, files);
         const product = this.productsRepository.create({
             ...dto,
+            thumbnail,
+            images,
             slug: await this.resolveSlug(dto.slug ?? dto.name),
         });
         return this.productsRepository.save(product);
@@ -66,7 +77,7 @@ export class ProductsService {
         return this.productsRepository.findByIds(ids);
     }
 
-    async update(id: string, dto: UpdateProductDto): Promise<Product> {
+    async update(id: string, dto: UpdateProductDto, files?: ProductImageFiles): Promise<Product> {
         const product = await this.findOne(id);
 
         if (dto.sku && dto.sku !== product.sku) await this.assertSkuAvailable(dto.sku, id);
@@ -82,7 +93,14 @@ export class ProductsService {
             product.slug = await this.resolveSlug(dto.name, id);
         }
 
+        // Không gửi thumbnail/images (cả URL lẫn file) thì undefined -> giữ nguyên ảnh cũ.
+        // Chỉ gửi imagesFiles (không kèm images) -> gộp thêm vào ảnh hiện có, không thay thế.
+        const { thumbnail, images } = await this.resolveImages(dto, files, product.images);
+
         const { slug: _slug, ...rest } = dto;
+        if (thumbnail !== undefined) rest.thumbnail = thumbnail;
+        if (images !== undefined) rest.images = images;
+
         Object.assign(product, rest);
         return this.productsRepository.save(product);
     }
@@ -148,5 +166,39 @@ export class ProductsService {
             candidate = `${base}-${suffix}`;
         }
         return candidate;
+    }
+
+    /**
+     * `thumbnailFile`/`imagesFiles` (nếu có) được upload lên R2 rồi gộp với
+     * `thumbnail`/`images` dạng URL sẵn có trong dto. Dùng chung cho create/update:
+     *
+     * - `thumbnail: undefined` = không đụng tới (giữ ảnh cũ ở update, không có ảnh ở create).
+     * - `images: undefined` = không đụng tới danh sách ảnh hiện có.
+     * - Chỉ gửi `imagesFiles` (không kèm `images`) ở update -> gộp thêm vào
+     *   `existingImages`, không thay thế — nếu không, mỗi lần thêm 1 ảnh sẽ xoá
+     *   sạch ảnh cũ vì client thường không gửi lại toàn bộ URL đang có.
+     */
+    private async resolveImages(
+        dto: CreateProductDto | UpdateProductDto,
+        files: ProductImageFiles | undefined,
+        existingImages?: string[] | null,
+    ): Promise<{ thumbnail: string | undefined; images: string[] | undefined }> {
+        const thumbnail = files?.thumbnailFile
+            ? (await this.uploadsService.uploadImage(files.thumbnailFile, UploadFolder.PRODUCTS))
+                  .url
+            : dto.thumbnail;
+
+        const uploadedImages = files?.imagesFiles?.length
+            ? (
+                  await this.uploadsService.uploadImages(files.imagesFiles, UploadFolder.PRODUCTS)
+              ).map((image) => image.url)
+            : [];
+
+        if (dto.images === undefined && uploadedImages.length === 0) {
+            return { thumbnail, images: undefined };
+        }
+
+        const baseImages = dto.images ?? existingImages ?? [];
+        return { thumbnail, images: [...baseImages, ...uploadedImages] };
     }
 }
