@@ -16,6 +16,8 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+deploy/.env.*
+!deploy/.env.*.example
 
 # tests
 /coverage
