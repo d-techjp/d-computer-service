@@ -7,10 +7,11 @@ import {
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, type EntityManager, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { Role } from '../../common/enums/role.enum';
+import { PermissionCode } from '../../common/enums/permission.enum';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { resolveSortColumn } from '../../common/utils/query.util';
 import { Product, ProductStatus } from '../products/entities/product.entity';
+import { UserPermissionsService } from '../rbac/user-permissions.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import type { QueryOrderDto } from './dto/query-order.dto';
 import { OrderItem } from './entities/order-item.entity';
@@ -31,6 +32,7 @@ export class OrdersService {
     constructor(
         @InjectRepository(Order) private readonly ordersRepository: Repository<Order>,
         @InjectDataSource() private readonly dataSource: DataSource,
+        private readonly userPermissionsService: UserPermissionsService,
     ) {}
 
     /**
@@ -161,11 +163,10 @@ export class OrdersService {
         return order;
     }
 
-    /** Khách chỉ xem được đơn của chính mình; admin/staff xem được tất cả. */
+    /** Khách chỉ xem được đơn của chính mình; ai có quyền quản lý đơn xem được tất cả. */
     async findOneForUser(id: string, user: AuthenticatedUser): Promise<Order> {
         const order = await this.findOne(id);
-        const isStaff = user.role === Role.ADMIN || user.role === Role.STAFF;
-        if (!isStaff && order.userId !== user.id) {
+        if (!(await this.canManageOrders(user)) && order.userId !== user.id) {
             throw new ForbiddenException('Bạn không có quyền xem đơn hàng này');
         }
         return order;
@@ -210,14 +211,19 @@ export class OrdersService {
     /** Khách tự huỷ đơn của mình khi đơn còn ở trạng thái cho phép. */
     async cancelByCustomer(id: string, user: AuthenticatedUser, reason?: string): Promise<Order> {
         const order = await this.findOneForUser(id, user);
-        const isStaff = user.role === Role.ADMIN || user.role === Role.STAFF;
 
-        if (!isStaff && order.status !== OrderStatus.PENDING) {
+        if (!(await this.canManageOrders(user)) && order.status !== OrderStatus.PENDING) {
             throw new BadRequestException(
                 'Chỉ huỷ được đơn đang chờ xác nhận — vui lòng liên hệ cửa hàng',
             );
         }
         return this.updateStatus(id, OrderStatus.CANCELLED, reason ?? 'Khách hàng huỷ đơn');
+    }
+
+    /** Quyền xem/thao tác trên đơn của người khác — theo permission, không theo role code. */
+    private async canManageOrders(user: AuthenticatedUser): Promise<boolean> {
+        const granted = await this.userPermissionsService.getByRoleCode(user.role);
+        return granted.includes(PermissionCode.ORDERS_MANAGE);
     }
 
     async updatePaymentStatus(id: string, paymentStatus: PaymentStatus): Promise<Order> {

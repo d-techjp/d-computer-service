@@ -1,13 +1,16 @@
 import * as bcrypt from 'bcrypt';
 import { config as loadEnv } from 'dotenv';
 import type { DataSource } from 'typeorm';
-import { Role } from '../../common/enums/role.enum';
+import { PERMISSION_CATALOG, SYSTEM_ROLES } from '../../common/enums/permission.enum';
+import { RoleCode } from '../../common/enums/role.enum';
 import { slugify } from '../../common/utils/slug.util';
 import { BCRYPT_SALT_ROUNDS, configuration } from '../../config/configuration';
 import { Article, ArticleStatus } from '../../modules/articles/entities/article.entity';
 import { Brand } from '../../modules/brands/entities/brand.entity';
 import { Category } from '../../modules/categories/entities/category.entity';
 import { Product, ProductStatus } from '../../modules/products/entities/product.entity';
+import { Permission } from '../../modules/rbac/entities/permission.entity';
+import { Role } from '../../modules/rbac/entities/role.entity';
 import { User, UserStatus } from '../../modules/users/entities/user.entity';
 import dataSource from '../data-source';
 
@@ -16,6 +19,61 @@ loadEnv();
 const log = (message: string): void => {
     process.stdout.write(`${message}\n`);
 };
+
+/**
+ * Đồng bộ bảng `permissions` với PERMISSION_CATALOG. Chỉ thêm mới / cập nhật
+ * metadata — không xoá permission lạ vì admin có thể đã tự tạo qua API.
+ */
+async function seedPermissions(ds: DataSource): Promise<Map<string, Permission>> {
+    const repository = ds.getRepository(Permission);
+    const result = new Map<string, Permission>();
+
+    for (const definition of PERMISSION_CATALOG) {
+        let permission = await repository.findOne({ where: { code: definition.code } });
+
+        if (permission) {
+            permission.name = definition.name;
+            permission.module = definition.module;
+            permission.description = definition.description;
+            permission = await repository.save(permission);
+        } else {
+            permission = await repository.save(repository.create(definition));
+        }
+        result.set(definition.code, permission);
+    }
+
+    log(`✓ Permission: ${result.size} bản ghi`);
+    return result;
+}
+
+/**
+ * Tạo 3 role hệ thống. Role đã tồn tại thì **không đụng vào permission** — admin
+ * có thể đã chỉnh qua API, seed chạy lại không được ghi đè lựa chọn đó.
+ */
+async function seedRoles(ds: DataSource, permissions: Map<string, Permission>): Promise<void> {
+    const repository = ds.getRepository(Role);
+    let created = 0;
+
+    for (const definition of SYSTEM_ROLES) {
+        const existing = await repository.findOne({ where: { code: definition.code } });
+        if (existing) continue;
+
+        await repository.save(
+            repository.create({
+                code: definition.code,
+                name: definition.name,
+                description: definition.description,
+                isSystem: true,
+                permissions: definition.permissions
+                    .map((code) => permissions.get(code))
+                    .filter((permission): permission is Permission => permission !== undefined),
+            }),
+        );
+        created += 1;
+    }
+
+    log(`✓ Vai trò: tạo mới ${created}/${SYSTEM_ROLES.length}`);
+}
 
 async function seedAdmin(ds: DataSource): Promise<User> {
     const { seed } = configuration();
@@ -27,12 +85,16 @@ async function seedAdmin(ds: DataSource): Promise<User> {
         return existing;
     }
 
+    const adminRole = await ds.getRepository(Role).findOneOrFail({
+        where: { code: RoleCode.ADMIN },
+    });
+
     const admin = users.create({
         username: seed.adminUsername,
         email: seed.adminEmail,
         password: await bcrypt.hash(seed.adminPassword, BCRYPT_SALT_ROUNDS),
         fullName: seed.adminName,
-        role: Role.ADMIN,
+        roleId: adminRole.id,
         status: UserStatus.ACTIVE,
     });
     await users.save(admin);
@@ -211,6 +273,10 @@ async function main(): Promise<void> {
     log('— Bắt đầu seed dữ liệu —');
 
     try {
+        // RBAC phải chạy trước: user cần role_id trỏ tới vai trò đã tồn tại
+        const permissions = await seedPermissions(ds);
+        await seedRoles(ds, permissions);
+
         const admin = await seedAdmin(ds);
         const categories = await seedCategories(ds);
         const brands = await seedBrands(ds);

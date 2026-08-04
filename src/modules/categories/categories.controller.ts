@@ -15,9 +15,9 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { Role } from '../../common/enums/role.enum';
+import { PermissionCode } from '../../common/enums/permission.enum';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -63,7 +63,7 @@ export class CategoriesController {
 
     @ApiBearerAuth()
     @Post()
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.PRODUCT_CATEGORY_MANAGE)
     @LogActivity({ action: ActivityAction.CREATE, resource: 'category' })
     @ApiOperation({ summary: 'Tạo danh mục' })
     create(@Body() dto: CreateCategoryDto): Promise<Category> {
@@ -72,7 +72,7 @@ export class CategoriesController {
 
     @ApiBearerAuth()
     @Patch(':id')
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.PRODUCT_CATEGORY_MANAGE)
     @LogActivity({ action: ActivityAction.UPDATE, resource: 'category' })
     @ApiOperation({ summary: 'Cập nhật danh mục' })
     update(
@@ -84,7 +84,7 @@ export class CategoriesController {
 
     @ApiBearerAuth()
     @Delete(':id')
-    @Roles(Role.ADMIN)
+    @RequirePermissions(PermissionCode.PRODUCT_CATEGORY_MANAGE)
     @HttpCode(HttpStatus.NO_CONTENT)
     @LogActivity({ action: ActivityAction.DELETE, resource: 'category' })
     @ApiOperation({ summary: 'Xoá mềm danh mục' })

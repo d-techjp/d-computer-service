@@ -1,14 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
-import { Role } from '../../../common/enums/role.enum';
+import { toLowerTrimmed } from '../../../common/transformers/transform.helpers';
 import { UserStatus } from '../entities/user.entity';
 
 export class QueryUserDto extends PaginationQueryDto {
-    @ApiPropertyOptional({ enum: Role })
-    @IsEnum(Role)
+    @ApiPropertyOptional({ example: 'staff', description: 'Lọc theo code vai trò' })
+    @Transform(toLowerTrimmed)
+    @IsString()
+    @MaxLength(50)
     @IsOptional()
-    role?: Role;
+    roleCode?: string;
 
     @ApiPropertyOptional({ enum: UserStatus })
     @IsEnum(UserStatus)

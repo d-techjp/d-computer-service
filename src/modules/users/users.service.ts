@@ -3,9 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Brackets, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { Role } from '../../common/enums/role.enum';
+import { RoleCode } from '../../common/enums/role.enum';
 import { resolveSortColumn } from '../../common/utils/query.util';
 import { BCRYPT_SALT_ROUNDS } from '../../config/configuration';
+import { TokenVersionStore } from '../auth/token-version/token-version.store';
+import { RolesService } from '../rbac/roles.service';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { QueryUserDto } from './dto/query-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
@@ -17,13 +19,16 @@ const SORTABLE_COLUMNS = [
     'username',
     'email',
     'fullName',
-    'role',
     'status',
 ] as const;
 
 @Injectable()
 export class UsersService {
-    constructor(@InjectRepository(User) private readonly usersRepository: Repository<User>) {}
+    constructor(
+        @InjectRepository(User) private readonly usersRepository: Repository<User>,
+        private readonly rolesService: RolesService,
+        private readonly tokenVersionStore: TokenVersionStore,
+    ) {}
 
     hashPassword(plain: string): Promise<string> {
         return bcrypt.hash(plain, BCRYPT_SALT_ROUNDS);
@@ -37,10 +42,15 @@ export class UsersService {
         await this.assertUsernameAvailable(dto.username);
         if (dto.email) await this.assertEmailAvailable(dto.email);
 
+        const { roleCode, ...rest } = dto;
+        const role = await this.rolesService.findByCode(roleCode ?? RoleCode.CUSTOMER);
+
         const user = this.usersRepository.create({
-            ...dto,
+            ...rest,
             password: await this.hashPassword(dto.password),
-            role: dto.role ?? Role.CUSTOMER,
+            // Gán cả quan hệ để response trả luôn `role`, không phải query lại
+            roleId: role.id,
+            role,
             status: dto.status ?? UserStatus.ACTIVE,
         });
 
@@ -51,7 +61,10 @@ export class UsersService {
     }
 
     async findAll(query: QueryUserDto): Promise<PaginatedResult<User>> {
-        const qb = this.usersRepository.createQueryBuilder('user');
+        // `eager` không áp dụng cho QueryBuilder -> phải join tay để có role.code
+        const qb = this.usersRepository
+            .createQueryBuilder('user')
+            .leftJoinAndSelect('user.role', 'role');
 
         if (query.search) {
             qb.andWhere(
@@ -64,7 +77,7 @@ export class UsersService {
                 ),
             );
         }
-        if (query.role) qb.andWhere('user.role = :role', { role: query.role });
+        if (query.roleCode) qb.andWhere('role.code = :roleCode', { roleCode: query.roleCode });
         if (query.status) qb.andWhere('user.status = :status', { status: query.status });
 
         const sortBy = resolveSortColumn(query.sortBy, SORTABLE_COLUMNS, 'createdAt');
@@ -80,10 +93,11 @@ export class UsersService {
         return user;
     }
 
-    /** Dùng cho luồng đăng nhập: kèm cột `password` (mặc định select:false). */
+    /** Dùng cho luồng đăng nhập: kèm cột `password` (mặc định select:false) và role. */
     findByUsernameWithPassword(username: string): Promise<User | null> {
         return this.usersRepository
             .createQueryBuilder('user')
+            .leftJoinAndSelect('user.role', 'role')
             .addSelect('user.password')
             .where('user.username = :username', { username: username.toLowerCase() })
             .getOne();
@@ -93,6 +107,7 @@ export class UsersService {
     findByIdWithPassword(id: string): Promise<User | null> {
         return this.usersRepository
             .createQueryBuilder('user')
+            .leftJoinAndSelect('user.role', 'role')
             .addSelect('user.password')
             .where('user.id = :id', { id })
             .getOne();
@@ -107,6 +122,26 @@ export class UsersService {
 
         Object.assign(user, dto);
         return this.usersRepository.save(user);
+    }
+
+    /**
+     * Đổi vai trò của user.
+     *
+     * Role nằm trong JWT nên token đang cầm vẫn mang quyền cũ — thu hồi luôn
+     * để việc hạ quyền có hiệu lực ngay; user phải đăng nhập lại.
+     */
+    async assignRole(id: string, roleCode: string): Promise<User> {
+        const user = await this.findOne(id);
+        const role = await this.rolesService.findByCode(roleCode);
+
+        if (user.roleId === role.id) return user;
+
+        user.roleId = role.id;
+        user.role = role;
+        const saved = await this.usersRepository.save(user);
+
+        await this.tokenVersionStore.revoke(id);
+        return saved;
     }
 
     async remove(id: string): Promise<void> {

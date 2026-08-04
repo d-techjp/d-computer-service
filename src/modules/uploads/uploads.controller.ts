@@ -9,8 +9,8 @@ import {
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '../../common/enums/role.enum';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { PermissionCode } from '../../common/enums/permission.enum';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
 import { MAX_IMAGES_PER_REQUEST } from './constants/upload.constants';
 import { UploadImageQueryDto } from './dto/upload-image-query.dto';
@@ -25,7 +25,8 @@ export class UploadsController {
     constructor(private readonly uploadsService: UploadsService) {}
 
     @Post('images')
-    @Roles(Role.ADMIN, Role.STAFF)
+    // Ảnh dùng cho cả sản phẩm lẫn bài viết -> chỉ cần một trong hai quyền
+    @RequirePermissions(PermissionCode.PRODUCT_MANAGE, PermissionCode.ARTICLE_MANAGE)
     @LogActivity({ action: ActivityAction.CREATE, resource: 'upload' })
     @UseInterceptors(FileInterceptor('file', buildImageMulterOptions()))
     @ApiConsumes('multipart/form-data')
@@ -49,7 +50,8 @@ export class UploadsController {
     }
 
     @Post('images/multiple')
-    @Roles(Role.ADMIN, Role.STAFF)
+    // Ảnh dùng cho cả sản phẩm lẫn bài viết -> chỉ cần một trong hai quyền
+    @RequirePermissions(PermissionCode.PRODUCT_MANAGE, PermissionCode.ARTICLE_MANAGE)
     @LogActivity({ action: ActivityAction.CREATE, resource: 'upload' })
     @UseInterceptors(
         FilesInterceptor(

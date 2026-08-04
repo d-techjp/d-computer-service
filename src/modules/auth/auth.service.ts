@@ -1,8 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Permission, ROLE_PERMISSIONS } from '../../common/enums/permission.enum';
-import { Role } from '../../common/enums/role.enum';
 import type {
     JwtExpiresIn,
     JwtPayload,
@@ -10,6 +8,7 @@ import type {
 import { parseDurationToSeconds } from '../../common/utils/duration.util';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { ActivityAction, ActivityStatus } from '../activity-logs/enums/activity-action.enum';
+import { UserPermissionsService } from '../rbac/user-permissions.service';
 import { User, UserStatus } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import type { AuthResponseDto } from './dto/auth-response.dto';
@@ -29,6 +28,7 @@ export class AuthService {
         private readonly jwtService: JwtService,
         private readonly tokenVersionStore: TokenVersionStore,
         private readonly activityLogsService: ActivityLogsService,
+        private readonly userPermissionsService: UserPermissionsService,
         configService: ConfigService,
     ) {
         this.expiresIn = configService.get<string>('jwt.expiresIn', '1d') as JwtExpiresIn;
@@ -37,7 +37,8 @@ export class AuthService {
     }
 
     async register(dto: RegisterDto): Promise<AuthResponseDto> {
-        const user = await this.usersService.create({ ...dto, role: Role.CUSTOMER });
+        // RegisterDto đã bỏ roleCode -> UsersService tự gán vai trò khách hàng
+        const user = await this.usersService.create(dto);
 
         await this.activityLogsService.record({
             userId: user.id,
@@ -156,9 +157,12 @@ export class AuthService {
         }
     }
 
-    /** Danh sách permission theo role — client lưu vào storage để quyết định hiển thị UI. */
-    getPermissions(role: Role): Permission[] {
-        return ROLE_PERMISSIONS[role];
+    /**
+     * Permission của user, đọc từ bảng `role_permissions` (cache Redis theo role).
+     * Client lưu vào storage để quyết định hiển thị UI.
+     */
+    getPermissions(roleCode: string): Promise<string[]> {
+        return this.userPermissionsService.getByRoleCode(roleCode);
     }
 
     private async issueToken(user: User): Promise<AuthResponseDto> {
@@ -168,7 +172,7 @@ export class AuthService {
             sub: user.id,
             username: user.username,
             email: user.email,
-            role: user.role,
+            role: user.role.code,
             ver: tokenVersion,
         };
 
@@ -186,7 +190,7 @@ export class AuthService {
                 username: user.username,
                 email: user.email,
                 fullName: user.fullName,
-                role: user.role,
+                role: user.role.code,
             },
         };
     }

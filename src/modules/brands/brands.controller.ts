@@ -14,9 +14,9 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { Role } from '../../common/enums/role.enum';
+import { PermissionCode } from '../../common/enums/permission.enum';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
 import { BrandsService } from './brands.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
@@ -52,7 +52,7 @@ export class BrandsController {
 
     @ApiBearerAuth()
     @Post()
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.PRODUCT_BRAND_MANAGE)
     @LogActivity({ action: ActivityAction.CREATE, resource: 'brand' })
     @ApiOperation({ summary: 'Tạo thương hiệu' })
     create(@Body() dto: CreateBrandDto): Promise<Brand> {
@@ -61,7 +61,7 @@ export class BrandsController {
 
     @ApiBearerAuth()
     @Patch(':id')
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.PRODUCT_BRAND_MANAGE)
     @LogActivity({ action: ActivityAction.UPDATE, resource: 'brand' })
     @ApiOperation({ summary: 'Cập nhật thương hiệu' })
     update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBrandDto): Promise<Brand> {
@@ -70,7 +70,7 @@ export class BrandsController {
 
     @ApiBearerAuth()
     @Delete(':id')
-    @Roles(Role.ADMIN)
+    @RequirePermissions(PermissionCode.PRODUCT_BRAND_MANAGE)
     @HttpCode(HttpStatus.NO_CONTENT)
     @LogActivity({ action: ActivityAction.DELETE, resource: 'brand' })
     @ApiOperation({ summary: 'Xoá mềm thương hiệu' })

@@ -1,11 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Permission } from '../../../common/enums/permission.enum';
-import { Role } from '../../../common/enums/role.enum';
 
 export class PermissionsResponseDto {
-    @ApiProperty({ enum: Role })
-    role: Role;
+    @ApiProperty({ example: 'admin', description: 'Code vai trò đang gán' })
+    role: string;
 
-    @ApiProperty({ enum: Permission, isArray: true })
-    permissions: Permission[];
+    @ApiProperty({
+        type: String,
+        isArray: true,
+        example: ['dashboard.view', 'product.manage'],
+        description: 'Code các permission của vai trò — client lưu vào storage',
+    })
+    permissions: string[];
 }

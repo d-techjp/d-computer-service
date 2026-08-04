@@ -2,9 +2,9 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from 
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { Role } from '../../common/enums/role.enum';
+import { PermissionCode } from '../../common/enums/permission.enum';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -34,7 +34,7 @@ export class OrdersController {
     }
 
     @Get()
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.ORDERS_MANAGE)
     @ApiOperation({ summary: 'Danh sách toàn bộ đơn hàng (quản trị)' })
     findAll(@Query() query: QueryOrderDto): Promise<PaginatedResult<Order>> {
         return this.ordersService.findAll(query);
@@ -53,7 +53,7 @@ export class OrdersController {
 
     @Get('code/:code')
     @ApiOperation({ summary: 'Tra cứu đơn theo mã (quản trị)' })
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.ORDERS_MANAGE)
     findByCode(@Param('code') code: string): Promise<Order> {
         return this.ordersService.findByCode(code);
     }
@@ -68,7 +68,7 @@ export class OrdersController {
     }
 
     @Patch(':id/status')
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.ORDERS_MANAGE)
     @LogActivity({ action: ActivityAction.ORDER_STATUS_CHANGED, resource: 'order' })
     @ApiOperation({ summary: 'Đổi trạng thái đơn theo máy trạng thái (quản trị)' })
     updateStatus(
@@ -79,7 +79,7 @@ export class OrdersController {
     }
 
     @Patch(':id/payment-status')
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.ORDERS_MANAGE)
     @LogActivity({ action: ActivityAction.UPDATE, resource: 'order_payment' })
     @ApiOperation({ summary: 'Cập nhật trạng thái thanh toán (quản trị)' })
     updatePaymentStatus(

@@ -69,14 +69,36 @@ export class InitSchema1785655978128 implements MigrationInterface {
             `CREATE INDEX "idx_articles_status_published_at" ON "articles"  ("status", "published_at") `,
         );
         await queryRunner.query(
-            `CREATE TYPE "public"."users_role_enum" AS ENUM('admin', 'staff', 'customer')`,
+            `CREATE TABLE "permissions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "code" character varying(100) NOT NULL, "name" character varying(150) NOT NULL, "module" character varying(50) NOT NULL, "description" character varying(500), CONSTRAINT "PK_920331560282b8bd21bb02290df" PRIMARY KEY ("id"))`,
+        );
+        await queryRunner.query(
+            `CREATE UNIQUE INDEX "uq_permissions_code" ON "permissions"  ("code") `,
+        );
+        await queryRunner.query(
+            `CREATE INDEX "idx_permissions_module" ON "permissions"  ("module") `,
+        );
+        await queryRunner.query(
+            `CREATE TABLE "roles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "deleted_at" TIMESTAMP WITH TIME ZONE, "code" character varying(50) NOT NULL, "name" character varying(150) NOT NULL, "description" character varying(500), "is_system" boolean NOT NULL DEFAULT false, CONSTRAINT "PK_c1433d71a4838793a49dcad46ab" PRIMARY KEY ("id"))`,
+        );
+        await queryRunner.query(
+            `CREATE UNIQUE INDEX "uq_roles_code" ON "roles"  ("code") WHERE "deleted_at" IS NULL`,
+        );
+        await queryRunner.query(
+            `CREATE TABLE "role_permissions" ("role_id" uuid NOT NULL, "permission_id" uuid NOT NULL, CONSTRAINT "PK_25d24010f53bb80b78e412c9656" PRIMARY KEY ("role_id", "permission_id"))`,
+        );
+        await queryRunner.query(
+            `CREATE INDEX "idx_role_permissions_role" ON "role_permissions"  ("role_id") `,
+        );
+        await queryRunner.query(
+            `CREATE INDEX "idx_role_permissions_permission" ON "role_permissions"  ("permission_id") `,
         );
         await queryRunner.query(
             `CREATE TYPE "public"."users_status_enum" AS ENUM('active', 'inactive', 'banned')`,
         );
         await queryRunner.query(
-            `CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "deleted_at" TIMESTAMP WITH TIME ZONE, "username" character varying(50) NOT NULL, "email" character varying(255), "password" character varying(255) NOT NULL, "full_name" character varying(150) NOT NULL, "phone" character varying(20), "avatar_url" character varying(500), "role" "public"."users_role_enum" NOT NULL DEFAULT 'customer', "status" "public"."users_status_enum" NOT NULL DEFAULT 'active', "last_login_at" TIMESTAMP WITH TIME ZONE, CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
+            `CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "deleted_at" TIMESTAMP WITH TIME ZONE, "username" character varying(50) NOT NULL, "email" character varying(255), "password" character varying(255) NOT NULL, "full_name" character varying(150) NOT NULL, "phone" character varying(20), "avatar_url" character varying(500), "role_id" uuid NOT NULL, "status" "public"."users_status_enum" NOT NULL DEFAULT 'active', "last_login_at" TIMESTAMP WITH TIME ZONE, CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
         );
+        await queryRunner.query(`CREATE INDEX "idx_users_role" ON "users"  ("role_id") `);
         await queryRunner.query(
             `CREATE UNIQUE INDEX "uq_users_username" ON "users"  ("username") WHERE "deleted_at" IS NULL`,
         );
@@ -125,9 +147,29 @@ export class InitSchema1785655978128 implements MigrationInterface {
         await queryRunner.query(
             `ALTER TABLE "activity_logs" ADD CONSTRAINT "FK_d54f841fa5478e4734590d44036" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
         );
+        // RESTRICT: không cho xoá role khi còn user đang gán (RolesService báo lỗi trước)
+        await queryRunner.query(
+            `ALTER TABLE "users" ADD CONSTRAINT "FK_a2cecd1a3531c0b041e29ba46e1" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+        );
+        // CASCADE: gỡ role/permission thì bản ghi liên kết biến mất theo
+        await queryRunner.query(
+            `ALTER TABLE "role_permissions" ADD CONSTRAINT "FK_178199805b901ccd220ab7740ec" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+        );
+        await queryRunner.query(
+            `ALTER TABLE "role_permissions" ADD CONSTRAINT "FK_17022daf3f885f7d35423e9971e" FOREIGN KEY ("permission_id") REFERENCES "permissions"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+        );
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(
+            `ALTER TABLE "role_permissions" DROP CONSTRAINT "FK_17022daf3f885f7d35423e9971e"`,
+        );
+        await queryRunner.query(
+            `ALTER TABLE "role_permissions" DROP CONSTRAINT "FK_178199805b901ccd220ab7740ec"`,
+        );
+        await queryRunner.query(
+            `ALTER TABLE "users" DROP CONSTRAINT "FK_a2cecd1a3531c0b041e29ba46e1"`,
+        );
         await queryRunner.query(
             `ALTER TABLE "activity_logs" DROP CONSTRAINT "FK_d54f841fa5478e4734590d44036"`,
         );
@@ -160,11 +202,19 @@ export class InitSchema1785655978128 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."idx_activity_logs_created_at"`);
         await queryRunner.query(`DROP TABLE "activity_logs"`);
         await queryRunner.query(`DROP TYPE "public"."activity_logs_status_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_users_role"`);
         await queryRunner.query(`DROP INDEX "public"."uq_users_email"`);
         await queryRunner.query(`DROP INDEX "public"."uq_users_username"`);
         await queryRunner.query(`DROP TABLE "users"`);
         await queryRunner.query(`DROP TYPE "public"."users_status_enum"`);
-        await queryRunner.query(`DROP TYPE "public"."users_role_enum"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_role_permissions_permission"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_role_permissions_role"`);
+        await queryRunner.query(`DROP TABLE "role_permissions"`);
+        await queryRunner.query(`DROP INDEX "public"."uq_roles_code"`);
+        await queryRunner.query(`DROP TABLE "roles"`);
+        await queryRunner.query(`DROP INDEX "public"."idx_permissions_module"`);
+        await queryRunner.query(`DROP INDEX "public"."uq_permissions_code"`);
+        await queryRunner.query(`DROP TABLE "permissions"`);
         await queryRunner.query(`DROP INDEX "public"."idx_articles_status_published_at"`);
         await queryRunner.query(`DROP INDEX "public"."uq_articles_slug"`);
         await queryRunner.query(`DROP TABLE "articles"`);

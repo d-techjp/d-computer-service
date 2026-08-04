@@ -43,7 +43,7 @@ export const configuration = () => ({
     seed: {
         adminUsername: process.env.SEED_ADMIN_USERNAME ?? 'admin',
         adminEmail: process.env.SEED_ADMIN_EMAIL ?? 'admin@dcomputer.local',
-        adminPassword: process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123456',
+        adminPassword: process.env.SEED_ADMIN_PASSWORD ?? '123123',
         adminName: process.env.SEED_ADMIN_NAME ?? 'System Administrator',
     },
 });

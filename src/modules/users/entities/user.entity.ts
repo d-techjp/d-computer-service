@@ -1,10 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Exclude } from 'class-transformer';
-import { Column, Entity, Index, OneToMany } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { SoftDeletableEntity } from '../../../common/entities/base.entity';
-import { Role } from '../../../common/enums/role.enum';
 import { Article } from '../../articles/entities/article.entity';
 import { Order } from '../../orders/entities/order.entity';
+import { Role } from '../../rbac/entities/role.entity';
 
 export enum UserStatus {
     ACTIVE = 'active',
@@ -41,8 +41,15 @@ export class User extends SoftDeletableEntity {
     @Column({ type: 'varchar', length: 500, nullable: true })
     avatarUrl: string | null;
 
-    @ApiProperty({ enum: Role, default: Role.CUSTOMER })
-    @Column({ type: 'enum', enum: Role, default: Role.CUSTOMER })
+    @ApiProperty({ format: 'uuid', description: 'Vai trò — quyết định permission của user' })
+    @Index('idx_users_role')
+    @Column({ type: 'uuid' })
+    roleId: string;
+
+    /** eager: bảng roles rất nhỏ, và hầu hết luồng đọc user đều cần `role.code`. */
+    @ApiPropertyOptional({ type: () => Role })
+    @ManyToOne(() => Role, (role) => role.users, { onDelete: 'RESTRICT', eager: true })
+    @JoinColumn({ name: 'role_id' })
     role: Role;
 
     @ApiProperty({ enum: UserStatus, default: UserStatus.ACTIVE })

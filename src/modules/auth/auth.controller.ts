@@ -93,10 +93,10 @@ export class AuthController {
             'Verify access token rồi trả permission theo role — client lưu vào storage để quyết định hiển thị UI.',
     })
     @ApiResponse({ status: HttpStatus.OK, type: PermissionsResponseDto })
-    getPermissions(@CurrentUser() user: AuthenticatedUser): PermissionsResponseDto {
+    async getPermissions(@CurrentUser() user: AuthenticatedUser): Promise<PermissionsResponseDto> {
         return {
             role: user.role,
-            permissions: this.authService.getPermissions(user.role),
+            permissions: await this.authService.getPermissions(user.role),
         };
     }
 }

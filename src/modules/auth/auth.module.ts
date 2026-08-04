@@ -3,16 +3,18 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import type { JwtExpiresIn } from '../../common/interfaces/authenticated-user.interface';
+import { RbacModule } from '../rbac/rbac.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { RedisTokenVersionStore } from './token-version/redis-token-version.store';
-import { TokenVersionStore } from './token-version/token-version.store';
+import { TokenVersionModule } from './token-version/token-version.module';
 
 @Module({
     imports: [
         UsersModule,
+        RbacModule,
+        TokenVersionModule,
         PassportModule.register({ defaultStrategy: 'jwt', session: false }),
         JwtModule.registerAsync({
             imports: [ConfigModule],
@@ -27,11 +29,7 @@ import { TokenVersionStore } from './token-version/token-version.store';
         }),
     ],
     controllers: [AuthController],
-    providers: [
-        AuthService,
-        JwtStrategy,
-        { provide: TokenVersionStore, useClass: RedisTokenVersionStore },
-    ],
-    exports: [AuthService, TokenVersionStore],
+    providers: [AuthService, JwtStrategy],
+    exports: [AuthService, TokenVersionModule],
 })
 export class AuthModule {}

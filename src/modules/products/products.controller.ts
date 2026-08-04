@@ -14,9 +14,9 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { Role } from '../../common/enums/role.enum';
+import { PermissionCode } from '../../common/enums/permission.enum';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -39,7 +39,7 @@ export class ProductsController {
 
     @ApiBearerAuth()
     @Get('low-stock')
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.INVENTORY_MANAGE)
     @ApiOperation({ summary: 'Sản phẩm dưới ngưỡng cảnh báo tồn kho' })
     findLowStock(): Promise<Product[]> {
         return this.productsService.findLowStock();
@@ -61,7 +61,7 @@ export class ProductsController {
 
     @ApiBearerAuth()
     @Post()
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
     @LogActivity({ action: ActivityAction.CREATE, resource: 'product' })
     @ApiOperation({ summary: 'Tạo sản phẩm' })
     create(@Body() dto: CreateProductDto): Promise<Product> {
@@ -70,7 +70,7 @@ export class ProductsController {
 
     @ApiBearerAuth()
     @Patch(':id')
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
     @LogActivity({ action: ActivityAction.UPDATE, resource: 'product' })
     @ApiOperation({ summary: 'Cập nhật sản phẩm' })
     update(
@@ -82,7 +82,7 @@ export class ProductsController {
 
     @ApiBearerAuth()
     @Patch(':id/stock')
-    @Roles(Role.ADMIN, Role.STAFF)
+    @RequirePermissions(PermissionCode.INVENTORY_MANAGE)
     @LogActivity({ action: ActivityAction.UPDATE, resource: 'product_stock' })
     @ApiOperation({ summary: 'Điều chỉnh tồn kho (nhập hàng / kiểm kê)' })
     adjustStock(
@@ -94,7 +94,7 @@ export class ProductsController {
 
     @ApiBearerAuth()
     @Delete(':id')
-    @Roles(Role.ADMIN)
+    @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
     @HttpCode(HttpStatus.NO_CONTENT)
     @LogActivity({ action: ActivityAction.DELETE, resource: 'product' })
     @ApiOperation({ summary: 'Xoá mềm sản phẩm' })

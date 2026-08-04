@@ -12,6 +12,7 @@ Backend thương mại điện tử viết bằng **NestJS 11 (Express) + TypeOR
 | Database     | PostgreSQL 17                                  |
 | Cache/Session | Redis (ioredis) — lưu token version           |
 | Auth         | JWT (passport-jwt) + token version trên Redis  |
+| Phân quyền   | RBAC lưu DB: role ↔ permission (n-n)           |
 | Validate     | class-validator / class-transformer + Joi cho env |
 | Docs         | Swagger tại `/api/docs`                        |
 | Test         | Jest                                           |
@@ -35,7 +36,7 @@ npm run start:dev
 
 ## OpenAPI & Postman
 
-Toàn bộ 8 module (55 endpoint) có sẵn cả OpenAPI spec lẫn Postman collection, sinh trực tiếp
+Toàn bộ 9 module (72 endpoint) có sẵn cả OpenAPI spec lẫn Postman collection, sinh trực tiếp
 từ decorator `@Api...` trong code — **không phải viết tay** nên luôn khớp API thật.
 
 ```bash
@@ -94,6 +95,7 @@ src/
 │   └── utils/                # slugify, parseDuration, resolveSortColumn
 └── modules/
     ├── auth/                 # đăng ký, đăng nhập, logout, đổi mật khẩu, token version store
+    ├── rbac/                 # role, permission, gán quyền (nguồn phân quyền)
     ├── users/                # CRUD user, hash password, profile
     ├── categories/           # danh mục nhiều cấp (cha-con)
     ├── brands/               # thương hiệu
@@ -137,22 +139,64 @@ Key có dạng `d-computer-service:token-version:{userId}`, TTL lấy theo `JWT_
 (hết hạn token thì bản ghi cũng hết ý nghĩa, để Redis tự dọn). Biến môi trường:
 `REDIS_HOST`, `REDIS_PORT`.
 
-## Phân quyền
+## Phân quyền (RBAC)
 
-Ba role trong [role.enum.ts](src/common/enums/role.enum.ts): `admin`, `staff`, `customer`.
+Role và permission nằm **trong database**, không hard-code: `roles` ↔ `permissions`
+quan hệ n-n qua `role_permissions`, mỗi user giữ **một** role (`users.role_id`).
+Admin tạo role mới và gán quyền tuỳ ý qua API mà không cần sửa code.
 
-`JwtAuthGuard` và `RolesGuard` đăng ký global — **mặc định mọi route đều cần đăng nhập**.
-Mở public bằng `@Public()`, giới hạn role bằng `@Roles(Role.ADMIN)`.
+`JwtAuthGuard` + `PermissionsGuard` đăng ký global — **mặc định mọi route đều cần đăng nhập**.
+Mở public bằng `@Public()`, giới hạn quyền bằng `@RequirePermissions(PermissionCode.PRODUCT_MANAGE)`
+(nhiều permission = thoả **một** trong số đó là qua). `@Roles(RoleCode.ADMIN)` vẫn dùng được
+cho các route cần khoá theo đúng role hệ thống.
 
-| Nhóm route                                  | Quyền                       |
-| ------------------------------------------- | --------------------------- |
-| `GET` products / categories / brands / articles | Public                  |
-| Ghi products / categories / brands / articles   | admin, staff            |
-| Xoá (soft delete)                           | admin                       |
-| Quản lý user                                | admin (user tự sửa `/users/me`) |
-| Đặt hàng, xem đơn của mình                  | mọi user đã đăng nhập       |
-| Xem/đổi trạng thái mọi đơn                  | admin, staff                |
-| Xem activity log toàn hệ thống              | admin                       |
+Permission theo module (phase này chưa tách theo từng API) — danh sách code trong
+[permission.enum.ts](src/common/enums/permission.enum.ts), cũng là dữ liệu seed cho bảng `permissions`:
+
+| Permission                | Route được mở                                  |
+| ------------------------- | ---------------------------------------------- |
+| `dashboard.view`          | Số liệu tổng quan                              |
+| `product.manage`          | Ghi/xoá sản phẩm, upload ảnh                   |
+| `product.category.manage` | Ghi/xoá danh mục                               |
+| `product.brand.manage`    | Ghi/xoá thương hiệu                            |
+| `inventory.manage`        | Điều chỉnh tồn kho, xem cảnh báo sắp hết hàng  |
+| `articles.manage`         | Ghi/xuất bản/xoá bài viết, upload ảnh          |
+| `orders.manage`           | Xem toàn bộ đơn, đổi trạng thái đơn/thanh toán |
+| `user.customer.manage`    | Xem danh sách/chi tiết user                    |
+| `user.admin.manage`       | Tạo/sửa/xoá user                               |
+| `user.role.manage`        | Toàn bộ `/roles`, `/permissions`, gán vai trò  |
+| `logs.view`               | Activity log toàn hệ thống                     |
+
+`GET` products/categories/brands/articles vẫn public; đặt hàng và xem đơn của mình chỉ
+cần đăng nhập.
+
+### API
+
+| Endpoint                        | Mô tả                                             |
+| ------------------------------- | ------------------------------------------------- |
+| `GET /auth/permissions`         | Permission của chính mình — client lưu vào storage |
+| `GET /roles` `POST /roles`      | Danh sách / tạo vai trò                            |
+| `GET /roles/options`            | **Rút gọn cho dropdown** (id/code/name/isSystem)   |
+| `PATCH` `DELETE /roles/:id`     | Sửa (không đổi `code`) / xoá mềm                   |
+| `PUT /roles/:id/permissions`    | Gán quyền cho vai trò (`permissionCodes`) — ghi đè toàn bộ |
+| `GET /permissions`              | Danh sách permission, lọc theo module              |
+| `GET /permissions/options`      | **Rút gọn cho dropdown**, gom sẵn theo module      |
+| `POST` `PATCH` `DELETE /permissions` | Tạo / sửa / xoá permission                    |
+| `PUT /users/:id/role`           | Gán vai trò cho user (`roleCode`)                  |
+
+**Hiệu lực của thay đổi:**
+
+- Đổi permission **của một role** → áp dụng ngay cho mọi user thuộc role đó, không cần
+  đăng nhập lại (key cache `permissions:role:{code}` bị xoá khi ghi).
+- Đổi **vai trò của một user** → token đang cầm bị **thu hồi** (vì role nằm trong JWT),
+  user phải đăng nhập lại. Chủ ý như vậy để việc hạ quyền có hiệu lực tức thì. Cũng vì thế
+  `PATCH /users/:id` **không** đổi được vai trò — chỉ `PUT /users/:id/role` làm được.
+
+Mọi API phân quyền đều nhận **code** (`"staff"`, `"product.manage"`) thay vì UUID cho dễ đọc;
+`GET /roles/options` và `GET /permissions/options` trả sẵn code để đổ vào dropdown.
+
+Ba role hệ thống (`admin`, `staff`, `customer`) được seed với `is_system = true` nên không
+xoá được; role còn user đang dùng cũng bị chặn xoá (`users.role_id` là FK `RESTRICT`).
 
 ## Định dạng response
 

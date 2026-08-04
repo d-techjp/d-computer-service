@@ -12,7 +12,6 @@ import {
     MaxLength,
     MinLength,
 } from 'class-validator';
-import { Role } from '../../../common/enums/role.enum';
 import { UserStatus } from '../entities/user.entity';
 
 export const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -63,10 +62,16 @@ export class CreateUserDto {
     @IsOptional()
     avatarUrl?: string;
 
-    @ApiPropertyOptional({ enum: Role, default: Role.CUSTOMER })
-    @IsEnum(Role)
+    @ApiPropertyOptional({
+        example: 'staff',
+        description:
+            'Code vai trò (lấy từ `GET /roles/options`) — bỏ trống thì mặc định là khách hàng',
+    })
+    @Transform(toLowerTrimmed)
+    @IsString()
+    @MaxLength(50)
     @IsOptional()
-    role?: Role;
+    roleCode?: string;
 
     @ApiPropertyOptional({ enum: UserStatus, default: UserStatus.ACTIVE })
     @IsEnum(UserStatus)

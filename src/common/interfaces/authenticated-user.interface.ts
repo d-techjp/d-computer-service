@@ -1,6 +1,6 @@
 import type { JwtSignOptions } from '@nestjs/jwt';
 import type { Request } from 'express';
-import type { Role } from '../enums/role.enum';
+import type { RoleCode } from '../enums/role.enum';
 
 /**
  * `jsonwebtoken` khai báo expiresIn là template literal type (`ms.StringValue`),
@@ -8,13 +8,20 @@ import type { Role } from '../enums/role.enum';
  */
 export type JwtExpiresIn = NonNullable<JwtSignOptions['expiresIn']>;
 
-/** Payload được ký vào JWT. */
+/**
+ * Payload được ký vào JWT.
+ *
+ * Chỉ mang `role` (code), **không mang danh sách permission**: đổi quyền của
+ * role phải có hiệu lực ngay mà không bắt user đăng nhập lại. PermissionsGuard
+ * tra permission theo code này (cache Redis).
+ */
 export interface JwtPayload {
     /** user id */
     sub: string;
     username: string;
     email: string | null;
-    role: Role;
+    /** code của role, ví dụ `admin` — khoá tra permission và so khớp `@Roles(...)` */
+    role: RoleCode | string;
     /** token version — phải khớp với version đang lưu trong TokenVersionStore */
     ver: number;
     iat?: number;
@@ -27,7 +34,7 @@ export interface AuthenticatedUser {
     id: string;
     username: string;
     email: string | null;
-    role: Role;
+    role: RoleCode | string;
     tokenVersion: number;
 }
 
