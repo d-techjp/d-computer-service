@@ -9,6 +9,7 @@ import {
 } from '@nestjs/terminus';
 import { Public } from '../../common/decorators/public.decorator';
 import { SkipActivityLog } from '../../common/decorators/activity-log.decorator';
+import { RedisHealthIndicator } from './redis.health';
 
 @ApiTags('Health')
 @Controller('health')
@@ -17,6 +18,7 @@ export class HealthController {
         private readonly health: HealthCheckService,
         private readonly database: TypeOrmHealthIndicator,
         private readonly memory: MemoryHealthIndicator,
+        private readonly redis: RedisHealthIndicator,
     ) {}
 
     @Public()
@@ -25,10 +27,11 @@ export class HealthController {
     @Version(VERSION_NEUTRAL)
     @Get()
     @HealthCheck()
-    @ApiOperation({ summary: 'Kiểm tra tình trạng service và kết nối database' })
+    @ApiOperation({ summary: 'Kiểm tra tình trạng service, kết nối database và Redis' })
     check(): Promise<HealthCheckResult> {
         return this.health.check([
             () => this.database.pingCheck('database', { timeout: 3000 }),
+            () => this.redis.pingCheck('redis'),
             () => this.memory.checkHeap('memory_heap', 512 * 1024 * 1024),
         ]);
     }

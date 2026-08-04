@@ -21,13 +21,14 @@ async function seedAdmin(ds: DataSource): Promise<User> {
     const { seed } = configuration();
     const users = ds.getRepository(User);
 
-    const existing = await users.findOne({ where: { email: seed.adminEmail } });
+    const existing = await users.findOne({ where: { username: seed.adminUsername } });
     if (existing) {
-        log(`• Admin đã tồn tại: ${existing.email}`);
+        log(`• Admin đã tồn tại: ${existing.username}`);
         return existing;
     }
 
     const admin = users.create({
+        username: seed.adminUsername,
         email: seed.adminEmail,
         password: await bcrypt.hash(seed.adminPassword, BCRYPT_SALT_ROUNDS),
         fullName: seed.adminName,
@@ -35,7 +36,7 @@ async function seedAdmin(ds: DataSource): Promise<User> {
         status: UserStatus.ACTIVE,
     });
     await users.save(admin);
-    log(`✓ Tạo admin: ${seed.adminEmail} / ${seed.adminPassword}`);
+    log(`✓ Tạo admin: ${seed.adminUsername} / ${seed.adminPassword}`);
     return admin;
 }
 

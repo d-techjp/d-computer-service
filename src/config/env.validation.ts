@@ -19,7 +19,8 @@ export const envValidationSchema = Joi.object({
     }),
     JWT_EXPIRES_IN: Joi.string().default('1d'),
 
-    TOKEN_VERSION_SWEEP_INTERVAL: Joi.number().integer().min(10).default(300),
+    REDIS_HOST: Joi.string().default('localhost'),
+    REDIS_PORT: Joi.number().port().default(6379),
 
     // Không bắt buộc lúc boot — chỉ cần khi thật sự gọi endpoint upload, tránh chặn
     // các luồng dev/test không đụng tới tính năng ảnh. UploadsService tự báo lỗi rõ ràng

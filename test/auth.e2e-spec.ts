@@ -18,7 +18,7 @@ interface AuthPayload {
 describe('Auth token version (e2e)', () => {
     let app: INestApplication<App>;
     const credentials = {
-        email: process.env.SEED_ADMIN_EMAIL ?? 'admin@dcomputer.local',
+        username: process.env.SEED_ADMIN_USERNAME ?? 'admin',
         password: process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123456',
     };
 
@@ -67,9 +67,9 @@ describe('Auth token version (e2e)', () => {
             .set('Authorization', `Bearer ${accessToken}`)
             .expect(200);
 
-        const user = bodyData<{ email: string }>(profile);
+        const user = bodyData<{ username: string }>(profile);
         expect(user).not.toHaveProperty('password');
-        expect(user.email).toBe(credentials.email);
+        expect(user.username).toBe(credentials.username);
     });
 
     it('login lần sau vô hiệu token cũ (token version tăng ở tầng server)', async () => {

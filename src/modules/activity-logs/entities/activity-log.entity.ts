@@ -33,7 +33,7 @@ export class ActivityLog {
 
     @ApiPropertyOptional()
     @Column({ type: 'varchar', length: 255, nullable: true })
-    userEmail: string | null;
+    email: string | null;
 
     @ApiProperty({ example: 'create' })
     @Column({ type: 'varchar', length: 64 })

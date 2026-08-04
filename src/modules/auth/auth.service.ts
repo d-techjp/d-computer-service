@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Permission, ROLE_PERMISSIONS } from '../../common/enums/permission.enum';
 import { Role } from '../../common/enums/role.enum';
 import type {
     JwtExpiresIn,
@@ -40,7 +41,7 @@ export class AuthService {
 
         await this.activityLogsService.record({
             userId: user.id,
-            userEmail: user.email,
+            email: user.email,
             action: ActivityAction.REGISTER,
             resource: 'auth',
             resourceId: user.id,
@@ -50,10 +51,10 @@ export class AuthService {
     }
 
     async login(dto: LoginDto): Promise<AuthResponseDto> {
-        const user = await this.usersService.findByEmailWithPassword(dto.email);
+        const user = await this.usersService.findByUsernameWithPassword(dto.username);
 
         // So khớp password kể cả khi không tìm thấy user cũng không đổi luồng:
-        // thông báo lỗi giữ nguyên để tránh lộ email nào đã tồn tại.
+        // thông báo lỗi giữ nguyên để tránh lộ username nào đã tồn tại.
         const passwordMatched = user
             ? await this.usersService.comparePassword(dto.password, user.password)
             : false;
@@ -61,13 +62,13 @@ export class AuthService {
         if (!user || !passwordMatched) {
             await this.activityLogsService.record({
                 userId: user?.id ?? null,
-                userEmail: dto.email,
+                email: user?.email ?? null,
                 action: ActivityAction.LOGIN_FAILED,
                 resource: 'auth',
                 status: ActivityStatus.FAILED,
-                description: 'Email hoặc mật khẩu không đúng',
+                description: 'Tên đăng nhập hoặc mật khẩu không đúng',
             });
-            throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+            throw new UnauthorizedException('Tên đăng nhập hoặc mật khẩu không đúng');
         }
 
         this.assertUsable(user);
@@ -76,7 +77,7 @@ export class AuthService {
         await this.usersService.markLoggedIn(user.id);
         await this.activityLogsService.record({
             userId: user.id,
-            userEmail: user.email,
+            email: user.email,
             action: ActivityAction.LOGIN,
             resource: 'auth',
             resourceId: user.id,
@@ -87,12 +88,12 @@ export class AuthService {
     }
 
     /** Tăng version -> token đang cầm lập tức hết hiệu lực. */
-    async logout(userId: string, email: string): Promise<{ tokenVersion: number }> {
+    async logout(userId: string, email: string | null): Promise<{ tokenVersion: number }> {
         const tokenVersion = await this.tokenVersionStore.increment(userId);
 
         await this.activityLogsService.record({
             userId,
-            userEmail: email,
+            email,
             action: ActivityAction.LOGOUT,
             resource: 'auth',
             resourceId: userId,
@@ -103,11 +104,11 @@ export class AuthService {
     }
 
     /** Xoá hẳn bản ghi version -> mọi token của user đều bị từ chối. */
-    async logoutAll(userId: string, email: string): Promise<void> {
+    async logoutAll(userId: string, email: string | null): Promise<void> {
         await this.tokenVersionStore.revoke(userId);
         await this.activityLogsService.record({
             userId,
-            userEmail: email,
+            email,
             action: ActivityAction.LOGOUT_ALL,
             resource: 'auth',
             resourceId: userId,
@@ -116,7 +117,7 @@ export class AuthService {
 
     async changePassword(userId: string, dto: ChangePasswordDto): Promise<AuthResponseDto> {
         const user = await this.usersService.findOne(userId);
-        const withPassword = await this.usersService.findByEmailWithPassword(user.email);
+        const withPassword = await this.usersService.findByIdWithPassword(userId);
 
         const matched =
             withPassword &&
@@ -130,7 +131,7 @@ export class AuthService {
 
         await this.activityLogsService.record({
             userId,
-            userEmail: user.email,
+            email: user.email,
             action: ActivityAction.CHANGE_PASSWORD,
             resource: 'auth',
             resourceId: userId,
@@ -155,11 +156,17 @@ export class AuthService {
         }
     }
 
+    /** Danh sách permission theo role — client lưu vào storage để quyết định hiển thị UI. */
+    getPermissions(role: Role): Permission[] {
+        return ROLE_PERMISSIONS[role];
+    }
+
     private async issueToken(user: User): Promise<AuthResponseDto> {
         const tokenVersion = await this.tokenVersionStore.increment(user.id);
 
         const payload: JwtPayload = {
             sub: user.id,
+            username: user.username,
             email: user.email,
             role: user.role,
             ver: tokenVersion,
@@ -176,6 +183,7 @@ export class AuthService {
             expiresIn: this.expiresInSeconds,
             user: {
                 id: user.id,
+                username: user.username,
                 email: user.email,
                 fullName: user.fullName,
                 role: user.role,

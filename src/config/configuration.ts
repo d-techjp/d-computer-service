@@ -28,6 +28,10 @@ export const configuration = () => ({
         expiresIn: process.env.JWT_EXPIRES_IN ?? '1d',
         issuer: process.env.JWT_ISSUER ?? 'd-computer-service',
     },
+    redis: {
+        host: process.env.REDIS_HOST ?? 'localhost',
+        port: toInt(process.env.REDIS_PORT, 6379),
+    },
     r2: {
         accountId: process.env.R2_ACCOUNT_ID ?? '',
         accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
@@ -37,6 +41,7 @@ export const configuration = () => ({
         publicUrl: (process.env.R2_PUBLIC_URL ?? '').replace(/\/+$/, ''),
     },
     seed: {
+        adminUsername: process.env.SEED_ADMIN_USERNAME ?? 'admin',
         adminEmail: process.env.SEED_ADMIN_EMAIL ?? 'admin@dcomputer.local',
         adminPassword: process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123456',
         adminName: process.env.SEED_ADMIN_NAME ?? 'System Administrator',

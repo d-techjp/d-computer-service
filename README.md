@@ -10,7 +10,8 @@ Backend thương mại điện tử viết bằng **NestJS 11 (Express) + TypeOR
 | Ngôn ngữ     | TypeScript 5.9 (strict)                        |
 | ORM          | TypeORM 1.x + migration (không dùng synchronize) |
 | Database     | PostgreSQL 17                                  |
-| Auth         | JWT (passport-jwt) + token version in-memory   |
+| Cache/Session | Redis (ioredis) — lưu token version           |
+| Auth         | JWT (passport-jwt) + token version trên Redis  |
 | Validate     | class-validator / class-transformer + Joi cho env |
 | Docs         | Swagger tại `/api/docs`                        |
 | Test         | Jest                                           |
@@ -21,6 +22,7 @@ Backend thương mại điện tử viết bằng **NestJS 11 (Express) + TypeOR
 cp .env.example .env          # sửa JWT_SECRET thành chuỗi ngẫu nhiên >= 32 ký tự
 npm install
 npm run db:up                 # Postgres 17 + Adminer (localhost:8080) qua Docker
+npm run redis:up              # Redis 7 — bỏ qua nếu đã có Redis riêng, chỉ cần sửa REDIS_HOST/PORT
 npm run migration:run         # tạo schema
 npm run seed                  # admin + danh mục/thương hiệu/sản phẩm/bài viết mẫu
 npm run start:dev
@@ -48,7 +50,7 @@ npm run docs:all
 | --- | --- |
 | [openapi/openapi.json](openapi/openapi.json) / `.yaml` | OpenAPI 3.0 đầy đủ — import vào Postman/Insomnia, generate SDK, hoặc dùng trực tiếp |
 | [postman/D-Computer-Service.postman_collection.json](postman/D-Computer-Service.postman_collection.json) | Postman Collection v2.1, gom theo tag (Auth, Users, Products…) |
-| [postman/D-Computer-Service.Local.postman_environment.json](postman/D-Computer-Service.Local.postman_environment.json) | Environment mẫu: `baseUrl`, `accessToken`, `adminEmail`, `adminPassword` |
+| [postman/D-Computer-Service.Local.postman_environment.json](postman/D-Computer-Service.Local.postman_environment.json) | Environment mẫu: `baseUrl`, `accessToken`, `adminUsername`, `adminPassword` |
 
 **Cách dùng trong Postman:** import cả 2 file trên, chọn environment "D-Computer Service - Local",
 chạy request **Login** trong folder `Auth` — test script của request này tự đọc `accessToken` từ
@@ -105,7 +107,7 @@ src/
 
 ## Cơ chế auth & token version
 
-Yêu cầu: mật khẩu hash bằng bcrypt, login trả JWT, token version lưu **in-memory có TTL**,
+Yêu cầu: mật khẩu hash bằng bcrypt, login trả JWT, token version lưu trên **Redis**,
 login tăng version, logout tăng version.
 
 Cách hoạt động:
@@ -122,20 +124,18 @@ Cách hoạt động:
 **Hệ quả cần biết** (đúng như thiết kế yêu cầu, không phải bug):
 
 - Mỗi user chỉ giữ **một phiên hoạt động**. Đăng nhập ở thiết bị B sẽ đá thiết bị A ra.
-- Store nằm trong RAM: **restart process là mọi token hiện hành bị từ chối**, user phải login lại.
-- Chạy **nhiều instance** thì mỗi instance một Map riêng → phải bật sticky session, hoặc
-  chuyển sang Redis.
+- Version nằm trên Redis nên **restart service không đá user ra**, và chạy được **nhiều
+  instance** mà không cần sticky session.
+- Redis chết thì không xác thực được request nào → `/health` báo `redis: down`.
 
-Đổi sang Redis chỉ cần viết class implement `TokenVersionStore` (abstract class ở
-[token-version.store.ts](src/modules/auth/token-version/token-version.store.ts)) rồi thay provider
-trong [auth.module.ts](src/modules/auth/auth.module.ts):
+Cài đặt: [redis-token-version.store.ts](src/modules/auth/token-version/redis-token-version.store.ts),
+khớp abstract class [token-version.store.ts](src/modules/auth/token-version/token-version.store.ts)
+(cũng là DI token) — muốn đổi backend chỉ cần thay provider trong
+[auth.module.ts](src/modules/auth/auth.module.ts).
 
-```ts
-{ provide: TokenVersionStore, useClass: RedisTokenVersionStore }
-```
-
-Biến môi trường liên quan: `TOKEN_VERSION_TTL` (giây, nên ≥ `JWT_EXPIRES_IN`) và
-`TOKEN_VERSION_SWEEP_INTERVAL` (chu kỳ dọn bản ghi hết hạn).
+Key có dạng `d-computer-service:token-version:{userId}`, TTL lấy theo `JWT_EXPIRES_IN`
+(hết hạn token thì bản ghi cũng hết ý nghĩa, để Redis tự dọn). Biến môi trường:
+`REDIS_HOST`, `REDIS_PORT`.
 
 ## Phân quyền
 
@@ -275,6 +275,7 @@ và `created_at`. `purgeOlderThan(days)` để dọn log cũ theo lịch vận h
 | `npm run migration:run` / `migration:revert` / `migration:show` | chạy / rollback / xem migration |
 | `npm run seed`                                        | seed dữ liệu mẫu                  |
 | `npm run db:up` / `npm run db:down`                   | bật/tắt Postgres bằng Docker      |
+| `npm run redis:up`                                    | bật Redis bằng Docker             |
 | `npm run docs:openapi` / `docs:postman` / `docs:all`  | xuất OpenAPI + sinh Postman collection |
 
 ## Quy ước code

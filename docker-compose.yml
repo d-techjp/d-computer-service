@@ -17,6 +17,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # Lưu token version. Đang dùng Redis sẵn có ở máy/hạ tầng khác thì bỏ qua service này,
+  # chỉ cần trỏ REDIS_HOST/REDIS_PORT trong .env.
+  redis:
+    image: redis:7-alpine
+    container_name: dcs-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   adminer:
     image: adminer:latest
     container_name: dcs-adminer
@@ -29,3 +46,4 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:

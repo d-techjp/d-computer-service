@@ -88,7 +88,7 @@ export class ActivityLogInterceptor implements NestInterceptor {
 
         return this.activityLogsService.record({
             userId: request.user?.id ?? null,
-            userEmail: request.user?.email ?? null,
+            email: request.user?.email ?? null,
             action: metadata.action,
             resource: metadata.resource,
             resourceId:

@@ -9,6 +9,7 @@ import { AuthService } from './auth.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { PermissionsResponseDto } from './dto/permissions-response.dto';
 import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('Auth')
@@ -82,5 +83,20 @@ export class AuthController {
     @ApiOperation({ summary: 'Thông tin tài khoản đang đăng nhập' })
     profile(@CurrentUser('id') userId: string): Promise<User> {
         return this.usersService.findOne(userId);
+    }
+
+    @ApiBearerAuth()
+    @Get('permissions')
+    @ApiOperation({
+        summary: 'Permission của tài khoản đang đăng nhập',
+        description:
+            'Verify access token rồi trả permission theo role — client lưu vào storage để quyết định hiển thị UI.',
+    })
+    @ApiResponse({ status: HttpStatus.OK, type: PermissionsResponseDto })
+    getPermissions(@CurrentUser() user: AuthenticatedUser): PermissionsResponseDto {
+        return {
+            role: user.role,
+            permissions: this.authService.getPermissions(user.role),
+        };
     }
 }

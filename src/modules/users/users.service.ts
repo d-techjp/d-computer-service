@@ -11,7 +11,15 @@ import type { QueryUserDto } from './dto/query-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserStatus } from './entities/user.entity';
 
-const SORTABLE_COLUMNS = ['createdAt', 'updatedAt', 'email', 'fullName', 'role', 'status'] as const;
+const SORTABLE_COLUMNS = [
+    'createdAt',
+    'updatedAt',
+    'username',
+    'email',
+    'fullName',
+    'role',
+    'status',
+] as const;
 
 @Injectable()
 export class UsersService {
@@ -26,7 +34,8 @@ export class UsersService {
     }
 
     async create(dto: CreateUserDto): Promise<User> {
-        await this.assertEmailAvailable(dto.email);
+        await this.assertUsernameAvailable(dto.username);
+        if (dto.email) await this.assertEmailAvailable(dto.email);
 
         const user = this.usersRepository.create({
             ...dto,
@@ -48,7 +57,8 @@ export class UsersService {
             qb.andWhere(
                 new Brackets((where) =>
                     where
-                        .where('user.email ILIKE :search', { search: `%${query.search}%` })
+                        .where('user.username ILIKE :search', { search: `%${query.search}%` })
+                        .orWhere('user.email ILIKE :search', { search: `%${query.search}%` })
                         .orWhere('user.fullName ILIKE :search', { search: `%${query.search}%` })
                         .orWhere('user.phone ILIKE :search', { search: `%${query.search}%` }),
                 ),
@@ -71,16 +81,28 @@ export class UsersService {
     }
 
     /** Dùng cho luồng đăng nhập: kèm cột `password` (mặc định select:false). */
-    findByEmailWithPassword(email: string): Promise<User | null> {
+    findByUsernameWithPassword(username: string): Promise<User | null> {
         return this.usersRepository
             .createQueryBuilder('user')
             .addSelect('user.password')
-            .where('user.email = :email', { email: email.toLowerCase() })
+            .where('user.username = :username', { username: username.toLowerCase() })
+            .getOne();
+    }
+
+    /** Dùng cho luồng đổi mật khẩu: kèm cột `password` (mặc định select:false). */
+    findByIdWithPassword(id: string): Promise<User | null> {
+        return this.usersRepository
+            .createQueryBuilder('user')
+            .addSelect('user.password')
+            .where('user.id = :id', { id })
             .getOne();
     }
 
     async update(id: string, dto: UpdateUserDto): Promise<User> {
         const user = await this.findOne(id);
+        if (dto.username && dto.username !== user.username) {
+            await this.assertUsernameAvailable(dto.username);
+        }
         if (dto.email && dto.email !== user.email) await this.assertEmailAvailable(dto.email);
 
         Object.assign(user, dto);
@@ -98,6 +120,14 @@ export class UsersService {
 
     async markLoggedIn(id: string): Promise<void> {
         await this.usersRepository.update({ id }, { lastLoginAt: new Date() });
+    }
+
+    private async assertUsernameAvailable(username: string): Promise<void> {
+        const existing = await this.usersRepository.findOne({
+            where: { username: username.toLowerCase() },
+            withDeleted: true,
+        });
+        if (existing) throw new ConflictException(`Username ${username} đã được sử dụng`);
     }
 
     private async assertEmailAvailable(email: string): Promise<void> {

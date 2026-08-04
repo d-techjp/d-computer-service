@@ -7,7 +7,7 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { InMemoryTokenVersionStore } from './token-version/in-memory-token-version.store';
+import { RedisTokenVersionStore } from './token-version/redis-token-version.store';
 import { TokenVersionStore } from './token-version/token-version.store';
 
 @Module({
@@ -30,8 +30,7 @@ import { TokenVersionStore } from './token-version/token-version.store';
     providers: [
         AuthService,
         JwtStrategy,
-        // Đổi sang RedisTokenVersionStore ở đây khi chạy nhiều instance
-        { provide: TokenVersionStore, useClass: InMemoryTokenVersionStore },
+        { provide: TokenVersionStore, useClass: RedisTokenVersionStore },
     ],
     exports: [AuthService, TokenVersionStore],
 })

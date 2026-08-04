@@ -12,7 +12,8 @@ export type JwtExpiresIn = NonNullable<JwtSignOptions['expiresIn']>;
 export interface JwtPayload {
     /** user id */
     sub: string;
-    email: string;
+    username: string;
+    email: string | null;
     role: Role;
     /** token version — phải khớp với version đang lưu trong TokenVersionStore */
     ver: number;
@@ -24,7 +25,8 @@ export interface JwtPayload {
 /** Object gắn vào `request.user` sau khi JwtStrategy validate thành công. */
 export interface AuthenticatedUser {
     id: string;
-    email: string;
+    username: string;
+    email: string | null;
     role: Role;
     tokenVersion: number;
 }

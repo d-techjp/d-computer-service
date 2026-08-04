@@ -14,10 +14,15 @@ export enum UserStatus {
 
 @Entity('users')
 export class User extends SoftDeletableEntity {
-    @ApiProperty({ example: 'admin@dcomputer.local' })
+    @ApiProperty({ example: 'admin' })
+    @Index('uq_users_username', { unique: true, where: '"deleted_at" IS NULL' })
+    @Column({ type: 'varchar', length: 50 })
+    username: string;
+
+    @ApiPropertyOptional({ example: 'admin@dcomputer.local' })
     @Index('uq_users_email', { unique: true, where: '"deleted_at" IS NULL' })
-    @Column({ type: 'varchar', length: 255 })
-    email: string;
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    email: string | null;
 
     /** Luôn bị loại khỏi response nhờ @Exclude + ClassSerializerInterceptor. */
     @Exclude({ toPlainOnly: true })

@@ -20,6 +20,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { ProductsModule } from './modules/products/products.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { UsersModule } from './modules/users/users.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
     imports: [
@@ -38,6 +39,8 @@ import { UsersModule } from './modules/users/users.module';
                 migrationsRun: configService.get<boolean>('database.runMigrations', false),
             }),
         }),
+
+        RedisModule,
 
         ActivityLogsModule,
         AuthModule,

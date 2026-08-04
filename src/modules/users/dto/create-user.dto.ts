@@ -19,18 +19,30 @@ export const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 export const PASSWORD_MESSAGE =
     'Mật khẩu tối thiểu 8 ký tự, gồm ít nhất 1 chữ thường, 1 chữ hoa và 1 chữ số';
 
+export const USERNAME_RULE = /^[a-zA-Z0-9_.]+$/;
+export const USERNAME_MESSAGE = 'Username chỉ gồm chữ, số, dấu chấm và gạch dưới';
+
 export class CreateUserDto {
-    @ApiProperty({ example: 'user@dcomputer.local' })
+    @ApiProperty({ example: 'nguyenvana' })
+    @Transform(toLowerTrimmed)
+    @IsString()
+    @Matches(USERNAME_RULE, { message: USERNAME_MESSAGE })
+    @MinLength(3)
+    @MaxLength(50)
+    username: string;
+
+    @ApiPropertyOptional({ example: 'user@dcomputer.local' })
     @Transform(toLowerTrimmed)
     @IsEmail({}, { message: 'Email không hợp lệ' })
     @MaxLength(255)
-    email: string;
+    @IsOptional()
+    email?: string;
 
-    @ApiProperty({ example: 'Password@123', minLength: 8 })
+    @ApiProperty({ example: 'Password@123', minLength: 6 })
     @IsString()
-    @MinLength(8)
+    @MinLength(6)
     @MaxLength(72)
-    @Matches(PASSWORD_RULE, { message: PASSWORD_MESSAGE })
+    // @Matches(PASSWORD_RULE, { message: PASSWORD_MESSAGE })
     password: string;
 
     @ApiProperty({ example: 'Nguyễn Văn A' })

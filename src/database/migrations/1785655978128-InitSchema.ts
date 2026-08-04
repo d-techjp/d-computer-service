@@ -75,7 +75,10 @@ export class InitSchema1785655978128 implements MigrationInterface {
             `CREATE TYPE "public"."users_status_enum" AS ENUM('active', 'inactive', 'banned')`,
         );
         await queryRunner.query(
-            `CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "deleted_at" TIMESTAMP WITH TIME ZONE, "email" character varying(255) NOT NULL, "password" character varying(255) NOT NULL, "full_name" character varying(150) NOT NULL, "phone" character varying(20), "avatar_url" character varying(500), "role" "public"."users_role_enum" NOT NULL DEFAULT 'customer', "status" "public"."users_status_enum" NOT NULL DEFAULT 'active', "last_login_at" TIMESTAMP WITH TIME ZONE, CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
+            `CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "deleted_at" TIMESTAMP WITH TIME ZONE, "username" character varying(50) NOT NULL, "email" character varying(255), "password" character varying(255) NOT NULL, "full_name" character varying(150) NOT NULL, "phone" character varying(20), "avatar_url" character varying(500), "role" "public"."users_role_enum" NOT NULL DEFAULT 'customer', "status" "public"."users_status_enum" NOT NULL DEFAULT 'active', "last_login_at" TIMESTAMP WITH TIME ZONE, CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
+        );
+        await queryRunner.query(
+            `CREATE UNIQUE INDEX "uq_users_username" ON "users"  ("username") WHERE "deleted_at" IS NULL`,
         );
         await queryRunner.query(
             `CREATE UNIQUE INDEX "uq_users_email" ON "users"  ("email") WHERE "deleted_at" IS NULL`,
@@ -84,7 +87,7 @@ export class InitSchema1785655978128 implements MigrationInterface {
             `CREATE TYPE "public"."activity_logs_status_enum" AS ENUM('success', 'failed')`,
         );
         await queryRunner.query(
-            `CREATE TABLE "activity_logs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid, "user_email" character varying(255), "action" character varying(64) NOT NULL, "resource" character varying(64) NOT NULL, "resource_id" character varying(64), "status" "public"."activity_logs_status_enum" NOT NULL DEFAULT 'success', "description" character varying(500), "method" character varying(10), "path" character varying(500), "status_code" integer, "duration_ms" integer, "ip_address" character varying(64), "user_agent" character varying(500), "metadata" jsonb, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_f25287b6140c5ba18d38776a796" PRIMARY KEY ("id"))`,
+            `CREATE TABLE "activity_logs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid, "email" character varying(255), "action" character varying(64) NOT NULL, "resource" character varying(64) NOT NULL, "resource_id" character varying(64), "status" "public"."activity_logs_status_enum" NOT NULL DEFAULT 'success', "description" character varying(500), "method" character varying(10), "path" character varying(500), "status_code" integer, "duration_ms" integer, "ip_address" character varying(64), "user_agent" character varying(500), "metadata" jsonb, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_f25287b6140c5ba18d38776a796" PRIMARY KEY ("id"))`,
         );
         await queryRunner.query(
             `CREATE INDEX "idx_activity_logs_created_at" ON "activity_logs"  ("created_at") `,
@@ -158,6 +161,7 @@ export class InitSchema1785655978128 implements MigrationInterface {
         await queryRunner.query(`DROP TABLE "activity_logs"`);
         await queryRunner.query(`DROP TYPE "public"."activity_logs_status_enum"`);
         await queryRunner.query(`DROP INDEX "public"."uq_users_email"`);
+        await queryRunner.query(`DROP INDEX "public"."uq_users_username"`);
         await queryRunner.query(`DROP TABLE "users"`);
         await queryRunner.query(`DROP TYPE "public"."users_status_enum"`);
         await queryRunner.query(`DROP TYPE "public"."users_role_enum"`);
