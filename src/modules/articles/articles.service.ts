@@ -1,21 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { resolveSortColumn } from '../../common/utils/query.util';
 import { slugify } from '../../common/utils/slug.util';
 import { CategoriesService } from '../categories/categories.service';
+import { ArticlesRepository } from './domain/articles.repository';
 import type { CreateArticleDto } from './dto/create-article.dto';
 import type { QueryArticleDto } from './dto/query-article.dto';
 import type { UpdateArticleDto } from './dto/update-article.dto';
 import { Article, ArticleStatus } from './entities/article.entity';
 
-const SORTABLE_COLUMNS = ['createdAt', 'updatedAt', 'publishedAt', 'title', 'viewCount'] as const;
-
 @Injectable()
 export class ArticlesService {
     constructor(
-        @InjectRepository(Article) private readonly articlesRepository: Repository<Article>,
+        private readonly articlesRepository: ArticlesRepository,
         private readonly categoriesService: CategoriesService,
     ) {}
 
@@ -34,34 +30,8 @@ export class ArticlesService {
     }
 
     async findAll(query: QueryArticleDto): Promise<PaginatedResult<Article>> {
-        const qb = this.articlesRepository
-            .createQueryBuilder('article')
-            .leftJoin('article.author', 'author')
-            .addSelect(['author.id', 'author.fullName'])
-            .leftJoin('article.category', 'category')
-            .addSelect(['category.id', 'category.name', 'category.slug']);
-
-        if (query.search) {
-            qb.andWhere('(article.title ILIKE :search OR article.excerpt ILIKE :search)', {
-                search: `%${query.search}%`,
-            });
-        }
-        if (query.status) qb.andWhere('article.status = :status', { status: query.status });
-        if (query.categoryId) {
-            qb.andWhere('article.categoryId = :categoryId', { categoryId: query.categoryId });
-        }
-        if (query.authorId)
-            qb.andWhere('article.authorId = :authorId', { authorId: query.authorId });
-        if (query.tag) {
-            // jsonb chứa phần tử tag -> dùng toán tử @>
-            qb.andWhere('article.tags @> :tag::jsonb', { tag: JSON.stringify([query.tag]) });
-        }
-
-        const sortBy = resolveSortColumn(query.sortBy, SORTABLE_COLUMNS, 'createdAt');
-        qb.orderBy(`article.${sortBy}`, query.sortOrder).skip(query.skip).take(query.limit);
-
-        const [items, total] = await qb.getManyAndCount();
-        return new PaginatedResult(items, total, query.page, query.limit);
+        const page = await this.articlesRepository.search(query);
+        return new PaginatedResult(page.items, page.total, query.page, query.limit);
     }
 
     /** Danh sách công khai: chỉ bài đã xuất bản. */
@@ -71,22 +41,16 @@ export class ArticlesService {
     }
 
     async findOne(id: string): Promise<Article> {
-        const article = await this.articlesRepository.findOne({
-            where: { id },
-            relations: { author: true, category: true },
-        });
+        const article = await this.articlesRepository.findById(id);
         if (!article) throw new NotFoundException(`Không tìm thấy bài viết với id ${id}`);
         return article;
     }
 
     async findBySlug(slug: string, publishedOnly = true): Promise<Article> {
-        const article = await this.articlesRepository.findOne({
-            where: publishedOnly ? { slug, status: ArticleStatus.PUBLISHED } : { slug },
-            relations: { author: true, category: true },
-        });
+        const article = await this.articlesRepository.findBySlug(slug, publishedOnly);
         if (!article) throw new NotFoundException(`Không tìm thấy bài viết với slug ${slug}`);
 
-        await this.articlesRepository.increment({ id: article.id }, 'viewCount', 1);
+        await this.articlesRepository.incrementViewCount(article.id);
         return article;
     }
 
@@ -139,11 +103,7 @@ export class ArticlesService {
 
         let candidate = base;
         let suffix = 1;
-        while (
-            (await this.articlesRepository.count({
-                where: excludeId ? { slug: candidate, id: Not(excludeId) } : { slug: candidate },
-            })) > 0
-        ) {
+        while ((await this.articlesRepository.countBySlug(candidate, excludeId)) > 0) {
             suffix += 1;
             candidate = `${base}-${suffix}`;
         }

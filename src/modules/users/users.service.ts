@@ -1,31 +1,20 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { Brackets, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
 import { RoleCode } from '../../common/enums/role.enum';
-import { resolveSortColumn } from '../../common/utils/query.util';
 import { BCRYPT_SALT_ROUNDS } from '../../config/configuration';
 import { TokenVersionStore } from '../auth/token-version/token-version.store';
 import { RolesService } from '../rbac/roles.service';
+import { UsersRepository } from './domain/users.repository';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { QueryUserDto } from './dto/query-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserStatus } from './entities/user.entity';
 
-const SORTABLE_COLUMNS = [
-    'createdAt',
-    'updatedAt',
-    'username',
-    'email',
-    'fullName',
-    'status',
-] as const;
-
 @Injectable()
 export class UsersService {
     constructor(
-        @InjectRepository(User) private readonly usersRepository: Repository<User>,
+        private readonly usersRepository: UsersRepository,
         private readonly rolesService: RolesService,
         private readonly tokenVersionStore: TokenVersionStore,
     ) {}
@@ -61,56 +50,24 @@ export class UsersService {
     }
 
     async findAll(query: QueryUserDto): Promise<PaginatedResult<User>> {
-        // `eager` không áp dụng cho QueryBuilder -> phải join tay để có role.code
-        const qb = this.usersRepository
-            .createQueryBuilder('user')
-            .leftJoinAndSelect('user.role', 'role');
-
-        if (query.search) {
-            qb.andWhere(
-                new Brackets((where) =>
-                    where
-                        .where('user.username ILIKE :search', { search: `%${query.search}%` })
-                        .orWhere('user.email ILIKE :search', { search: `%${query.search}%` })
-                        .orWhere('user.fullName ILIKE :search', { search: `%${query.search}%` })
-                        .orWhere('user.phone ILIKE :search', { search: `%${query.search}%` }),
-                ),
-            );
-        }
-        if (query.roleCode) qb.andWhere('role.code = :roleCode', { roleCode: query.roleCode });
-        if (query.status) qb.andWhere('user.status = :status', { status: query.status });
-
-        const sortBy = resolveSortColumn(query.sortBy, SORTABLE_COLUMNS, 'createdAt');
-        qb.orderBy(`user.${sortBy}`, query.sortOrder).skip(query.skip).take(query.limit);
-
-        const [items, total] = await qb.getManyAndCount();
-        return new PaginatedResult(items, total, query.page, query.limit);
+        const page = await this.usersRepository.search(query);
+        return new PaginatedResult(page.items, page.total, query.page, query.limit);
     }
 
     async findOne(id: string): Promise<User> {
-        const user = await this.usersRepository.findOne({ where: { id } });
+        const user = await this.usersRepository.findById(id);
         if (!user) throw new NotFoundException(`Không tìm thấy user với id ${id}`);
         return user;
     }
 
     /** Dùng cho luồng đăng nhập: kèm cột `password` (mặc định select:false) và role. */
     findByUsernameWithPassword(username: string): Promise<User | null> {
-        return this.usersRepository
-            .createQueryBuilder('user')
-            .leftJoinAndSelect('user.role', 'role')
-            .addSelect('user.password')
-            .where('user.username = :username', { username: username.toLowerCase() })
-            .getOne();
+        return this.usersRepository.findByUsernameWithPassword(username);
     }
 
     /** Dùng cho luồng đổi mật khẩu: kèm cột `password` (mặc định select:false). */
     findByIdWithPassword(id: string): Promise<User | null> {
-        return this.usersRepository
-            .createQueryBuilder('user')
-            .leftJoinAndSelect('user.role', 'role')
-            .addSelect('user.password')
-            .where('user.id = :id', { id })
-            .getOne();
+        return this.usersRepository.findByIdWithPassword(id);
     }
 
     async update(id: string, dto: UpdateUserDto): Promise<User> {
@@ -150,26 +107,22 @@ export class UsersService {
     }
 
     async updatePassword(id: string, hashedPassword: string): Promise<void> {
-        await this.usersRepository.update({ id }, { password: hashedPassword });
+        await this.usersRepository.updatePassword(id, hashedPassword);
     }
 
     async markLoggedIn(id: string): Promise<void> {
-        await this.usersRepository.update({ id }, { lastLoginAt: new Date() });
+        await this.usersRepository.markLoggedIn(id);
     }
 
     private async assertUsernameAvailable(username: string): Promise<void> {
-        const existing = await this.usersRepository.findOne({
-            where: { username: username.toLowerCase() },
-            withDeleted: true,
-        });
-        if (existing) throw new ConflictException(`Username ${username} đã được sử dụng`);
+        if (await this.usersRepository.existsByUsername(username)) {
+            throw new ConflictException(`Username ${username} đã được sử dụng`);
+        }
     }
 
     private async assertEmailAvailable(email: string): Promise<void> {
-        const existing = await this.usersRepository.findOne({
-            where: { email: email.toLowerCase() },
-            withDeleted: true,
-        });
-        if (existing) throw new ConflictException(`Email ${email} đã được sử dụng`);
+        if (await this.usersRepository.existsByEmail(email)) {
+            throw new ConflictException(`Email ${email} đã được sử dụng`);
+        }
     }
 }

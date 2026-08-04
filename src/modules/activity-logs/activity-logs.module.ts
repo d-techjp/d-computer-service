@@ -2,7 +2,9 @@ import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ActivityLogsController } from './activity-logs.controller';
 import { ActivityLogsService } from './activity-logs.service';
+import { ActivityLogsRepository } from './domain/activity-logs.repository';
 import { ActivityLog } from './entities/activity-log.entity';
+import { TypeOrmActivityLogsRepository } from './infrastructure/typeorm-activity-logs.repository';
 
 /**
  * Global vì ActivityLogInterceptor được đăng ký ở tầng app và mọi module
@@ -12,7 +14,10 @@ import { ActivityLog } from './entities/activity-log.entity';
 @Module({
     imports: [TypeOrmModule.forFeature([ActivityLog])],
     controllers: [ActivityLogsController],
-    providers: [ActivityLogsService],
+    providers: [
+        ActivityLogsService,
+        { provide: ActivityLogsRepository, useClass: TypeOrmActivityLogsRepository },
+    ],
     exports: [ActivityLogsService],
 })
 export class ActivityLogsModule {}

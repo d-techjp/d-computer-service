@@ -1,9 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import type Redis from 'ioredis';
-import { Repository } from 'typeorm';
 import { REDIS_CLIENT } from '../../redis/redis.constants';
-import { Role } from './entities/role.entity';
+import { RolesRepository } from './domain/roles.repository';
 
 const CACHE_NAMESPACE = 'permissions:role';
 /** Permission đổi không thường xuyên; TTL chỉ để dọn key của role đã xoá. */
@@ -23,7 +21,7 @@ export class UserPermissionsService {
     private readonly logger = new Logger(UserPermissionsService.name);
 
     constructor(
-        @InjectRepository(Role) private readonly rolesRepository: Repository<Role>,
+        private readonly rolesRepository: RolesRepository,
         @Inject(REDIS_CLIENT) private readonly redis: Redis,
     ) {}
 
@@ -32,10 +30,7 @@ export class UserPermissionsService {
         const cached = await this.readCache(roleCode);
         if (cached) return cached;
 
-        const role = await this.rolesRepository.findOne({
-            where: { code: roleCode },
-            relations: { permissions: true },
-        });
+        const role = await this.rolesRepository.findByCode(roleCode);
         const codes = role?.permissions.map((permission) => permission.code).sort() ?? [];
 
         await this.writeCache(roleCode, codes);

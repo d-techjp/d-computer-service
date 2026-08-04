@@ -39,3 +39,19 @@ export const toUpperCase = ({ value }: TransformFnParams): unknown => {
     const raw: unknown = value;
     return typeof raw === 'string' ? raw.toUpperCase() : raw;
 };
+
+/**
+ * Query nhiều giá trị trong 1 param, phân tách bằng `|` (vd `roleCode=staff|admin`)
+ * -> mảng chữ thường, đã trim, bỏ phần tử rỗng. Giữ nguyên nếu đã là mảng (client
+ * gửi `?roleCode=staff&roleCode=admin` thì Express tự dựng mảng trước khi tới đây).
+ */
+export const toLowerTrimmedArray = ({ value }: TransformFnParams): unknown => {
+    const raw: unknown = value;
+    const parts = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split('|') : null;
+    if (!parts) return raw;
+
+    return parts
+        .filter((part): part is string => typeof part === 'string')
+        .map((part) => part.trim().toLowerCase())
+        .filter((part) => part.length > 0);
+};

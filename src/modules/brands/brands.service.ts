@@ -1,19 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { resolveSortColumn } from '../../common/utils/query.util';
 import { slugify } from '../../common/utils/slug.util';
+import { BrandsRepository } from './domain/brands.repository';
 import type { CreateBrandDto } from './dto/create-brand.dto';
 import type { QueryBrandDto } from './dto/query-brand.dto';
 import type { UpdateBrandDto } from './dto/update-brand.dto';
 import { Brand } from './entities/brand.entity';
 
-const SORTABLE_COLUMNS = ['createdAt', 'updatedAt', 'name', 'sortOrder'] as const;
-
 @Injectable()
 export class BrandsService {
-    constructor(@InjectRepository(Brand) private readonly brandsRepository: Repository<Brand>) {}
+    constructor(private readonly brandsRepository: BrandsRepository) {}
 
     async create(dto: CreateBrandDto): Promise<Brand> {
         const slug = await this.resolveSlug(dto.slug ?? dto.name);
@@ -21,33 +17,18 @@ export class BrandsService {
     }
 
     async findAll(query: QueryBrandDto): Promise<PaginatedResult<Brand>> {
-        const qb = this.brandsRepository.createQueryBuilder('brand');
-
-        if (query.search) {
-            qb.andWhere('(brand.name ILIKE :search OR brand.slug ILIKE :search)', {
-                search: `%${query.search}%`,
-            });
-        }
-        if (query.isActive !== undefined) {
-            qb.andWhere('brand.isActive = :isActive', { isActive: query.isActive });
-        }
-        if (query.country) qb.andWhere('brand.country = :country', { country: query.country });
-
-        const sortBy = resolveSortColumn(query.sortBy, SORTABLE_COLUMNS, 'sortOrder');
-        qb.orderBy(`brand.${sortBy}`, query.sortOrder).skip(query.skip).take(query.limit);
-
-        const [items, total] = await qb.getManyAndCount();
-        return new PaginatedResult(items, total, query.page, query.limit);
+        const page = await this.brandsRepository.search(query);
+        return new PaginatedResult(page.items, page.total, query.page, query.limit);
     }
 
     async findOne(id: string): Promise<Brand> {
-        const brand = await this.brandsRepository.findOne({ where: { id } });
+        const brand = await this.brandsRepository.findById(id);
         if (!brand) throw new NotFoundException(`Không tìm thấy thương hiệu với id ${id}`);
         return brand;
     }
 
     async findBySlug(slug: string): Promise<Brand> {
-        const brand = await this.brandsRepository.findOne({ where: { slug } });
+        const brand = await this.brandsRepository.findBySlug(slug);
         if (!brand) throw new NotFoundException(`Không tìm thấy thương hiệu với slug ${slug}`);
         return brand;
     }
@@ -70,17 +51,14 @@ export class BrandsService {
         await this.brandsRepository.softRemove(await this.findOne(id));
     }
 
+    /** Sinh slug duy nhất; nếu trùng thì nối hậu tố -2, -3, ... — quy tắc nghiệp vụ, không phải persistence. */
     private async resolveSlug(source: string, excludeId?: string): Promise<string> {
         const base = slugify(source);
         if (!base) throw new BadRequestException('Không tạo được slug hợp lệ từ tên thương hiệu');
 
         let candidate = base;
         let suffix = 1;
-        while (
-            (await this.brandsRepository.count({
-                where: excludeId ? { slug: candidate, id: Not(excludeId) } : { slug: candidate },
-            })) > 0
-        ) {
+        while ((await this.brandsRepository.countBySlug(candidate, excludeId)) > 0) {
             suffix += 1;
             candidate = `${base}-${suffix}`;
         }

@@ -4,17 +4,14 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, type EntityManager, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
 import { PermissionCode } from '../../common/enums/permission.enum';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
-import { resolveSortColumn } from '../../common/utils/query.util';
-import { Product, ProductStatus } from '../products/entities/product.entity';
+import { ProductStatus } from '../products/entities/product.entity';
 import { UserPermissionsService } from '../rbac/user-permissions.service';
+import { OrdersRepository, type OrdersUnitOfWork } from './domain/orders.repository';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import type { QueryOrderDto } from './dto/query-order.dto';
-import { OrderItem } from './entities/order-item.entity';
 import { Order } from './entities/order.entity';
 import {
     ORDER_STATUS_TRANSITIONS,
@@ -24,14 +21,12 @@ import {
     STOCK_RESERVED_STATUSES,
 } from './enums/order.enum';
 
-const SORTABLE_COLUMNS = ['createdAt', 'updatedAt', 'total', 'status', 'code'] as const;
 const CODE_RETRY_LIMIT = 5;
 
 @Injectable()
 export class OrdersService {
     constructor(
-        @InjectRepository(Order) private readonly ordersRepository: Repository<Order>,
-        @InjectDataSource() private readonly dataSource: DataSource,
+        private readonly ordersRepository: OrdersRepository,
         private readonly userPermissionsService: UserPermissionsService,
     ) {}
 
@@ -40,13 +35,10 @@ export class OrdersService {
      * tồn kho, trừ kho rồi mới ghi đơn. Hai request mua cùng lúc không thể bán vượt kho.
      */
     async create(dto: CreateOrderDto, userId: string | null): Promise<Order> {
-        return this.dataSource.transaction(async (manager) => {
-            const products = await this.lockProducts(
-                manager,
-                dto.items.map((item) => item.productId),
-            );
+        return this.ordersRepository.runTransaction(async (uow) => {
+            const products = await uow.lockProducts(dto.items.map((item) => item.productId));
 
-            const items: OrderItem[] = [];
+            const items = [];
             let subtotal = 0;
 
             for (const input of dto.items) {
@@ -67,7 +59,7 @@ export class OrdersService {
                 subtotal += lineTotal;
 
                 items.push(
-                    manager.create(OrderItem, {
+                    uow.createOrderItem({
                         productId: product.id,
                         productName: product.name,
                         sku: product.sku,
@@ -81,7 +73,7 @@ export class OrdersService {
                 product.stock -= input.quantity;
                 product.soldCount += input.quantity;
                 if (product.stock === 0) product.status = ProductStatus.OUT_OF_STOCK;
-                await manager.save(Product, product);
+                await uow.saveProduct(product);
             }
 
             subtotal = this.round(subtotal);
@@ -92,8 +84,8 @@ export class OrdersService {
                 throw new BadRequestException('Giảm giá không được lớn hơn tổng tiền hàng');
             }
 
-            const order = manager.create(Order, {
-                code: await this.generateCode(manager),
+            const order = uow.createOrder({
+                code: await this.generateCode(uow),
                 userId,
                 status: OrderStatus.PENDING,
                 paymentStatus: PaymentStatus.UNPAID,
@@ -107,58 +99,23 @@ export class OrdersService {
                 items,
             });
 
-            return manager.save(Order, order);
+            return uow.saveOrder(order);
         });
     }
 
     async findAll(query: QueryOrderDto): Promise<PaginatedResult<Order>> {
-        const qb = this.ordersRepository
-            .createQueryBuilder('order')
-            .leftJoinAndSelect('order.items', 'item')
-            .leftJoin('order.user', 'user')
-            .addSelect(['user.id', 'user.email', 'user.fullName']);
-
-        if (query.search) {
-            qb.andWhere('order.code ILIKE :search', { search: `%${query.search}%` });
-        }
-        if (query.userId) qb.andWhere('order.userId = :userId', { userId: query.userId });
-        if (query.status) qb.andWhere('order.status = :status', { status: query.status });
-        if (query.paymentStatus) {
-            qb.andWhere('order.paymentStatus = :paymentStatus', {
-                paymentStatus: query.paymentStatus,
-            });
-        }
-        if (query.paymentMethod) {
-            qb.andWhere('order.paymentMethod = :paymentMethod', {
-                paymentMethod: query.paymentMethod,
-            });
-        }
-        if (query.from) qb.andWhere('order.createdAt >= :from', { from: query.from });
-        if (query.to) qb.andWhere('order.createdAt <= :to', { to: query.to });
-
-        const sortBy = resolveSortColumn(query.sortBy, SORTABLE_COLUMNS, 'createdAt');
-        // skip/take (không phải offset/limit) để TypeORM phân trang theo đơn hàng,
-        // không bị lệch khi join bảng items quan hệ 1-n
-        qb.orderBy(`order.${sortBy}`, query.sortOrder).skip(query.skip).take(query.limit);
-
-        const [items, total] = await qb.getManyAndCount();
-        return new PaginatedResult(items, total, query.page, query.limit);
+        const page = await this.ordersRepository.search(query);
+        return new PaginatedResult(page.items, page.total, query.page, query.limit);
     }
 
     async findOne(id: string): Promise<Order> {
-        const order = await this.ordersRepository.findOne({
-            where: { id },
-            relations: { items: true, user: true },
-        });
+        const order = await this.ordersRepository.findById(id);
         if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
         return order;
     }
 
     async findByCode(code: string): Promise<Order> {
-        const order = await this.ordersRepository.findOne({
-            where: { code },
-            relations: { items: true, user: true },
-        });
+        const order = await this.ordersRepository.findByCode(code);
         if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với mã ${code}`);
         return order;
     }
@@ -176,11 +133,8 @@ export class OrdersService {
      * Đổi trạng thái theo máy trạng thái. Khi huỷ đơn thì hoàn kho trong cùng transaction.
      */
     async updateStatus(id: string, nextStatus: OrderStatus, reason?: string): Promise<Order> {
-        return this.dataSource.transaction(async (manager) => {
-            const order = await manager.findOne(Order, {
-                where: { id },
-                relations: { items: true },
-            });
+        return this.ordersRepository.runTransaction(async (uow) => {
+            const order = await uow.findOrderWithItems(id);
             if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
 
             this.assertTransitionAllowed(order.status, nextStatus);
@@ -188,7 +142,7 @@ export class OrdersService {
             if (nextStatus === OrderStatus.CANCELLED) {
                 if (!reason) throw new BadRequestException('Cần nhập lý do khi huỷ đơn');
                 if (STOCK_RESERVED_STATUSES.includes(order.status)) {
-                    await this.restoreStock(manager, order);
+                    await this.restoreStock(uow, order);
                 }
                 order.cancelReason = reason;
                 order.cancelledAt = new Date();
@@ -204,7 +158,7 @@ export class OrdersService {
             if (nextStatus === OrderStatus.REFUNDED) order.paymentStatus = PaymentStatus.REFUNDED;
 
             order.status = nextStatus;
-            return manager.save(Order, order);
+            return uow.saveOrder(order);
         });
     }
 
@@ -237,16 +191,7 @@ export class OrdersService {
         from: Date,
         to: Date,
     ): Promise<{ orderCount: number; revenue: number; averageValue: number }> {
-        const row = await this.ordersRepository
-            .createQueryBuilder('order')
-            .select('COUNT(*)', 'orderCount')
-            .addSelect('COALESCE(SUM(order.total), 0)', 'revenue')
-            .where('order.status = :status', { status: OrderStatus.COMPLETED })
-            .andWhere('order.createdAt BETWEEN :from AND :to', { from, to })
-            .getRawOne<{ orderCount: string; revenue: string }>();
-
-        const orderCount = Number(row?.orderCount ?? 0);
-        const revenue = Number(row?.revenue ?? 0);
+        const { orderCount, revenue } = await this.ordersRepository.revenueSummary(from, to);
         return {
             orderCount,
             revenue,
@@ -254,31 +199,13 @@ export class OrdersService {
         };
     }
 
-    /** SELECT ... FOR UPDATE theo thứ tự id cố định để tránh deadlock giữa các transaction. */
-    private async lockProducts(
-        manager: EntityManager,
-        productIds: string[],
-    ): Promise<Map<string, Product>> {
-        const uniqueIds = [...new Set(productIds)].sort();
-        if (uniqueIds.length === 0) throw new BadRequestException('Đơn hàng không có sản phẩm nào');
-
-        const products = await manager
-            .createQueryBuilder(Product, 'product')
-            .setLock('pessimistic_write')
-            .where('product.id IN (:...ids)', { ids: uniqueIds })
-            .orderBy('product.id', 'ASC')
-            .getMany();
-
-        return new Map(products.map((product) => [product.id, product]));
-    }
-
-    private async restoreStock(manager: EntityManager, order: Order): Promise<void> {
+    private async restoreStock(uow: OrdersUnitOfWork, order: Order): Promise<void> {
         const productIds = order.items
             .map((item) => item.productId)
             .filter((id): id is string => id !== null);
         if (productIds.length === 0) return;
 
-        const products = await this.lockProducts(manager, productIds);
+        const products = await uow.lockProducts(productIds);
 
         for (const item of order.items) {
             const product = item.productId ? products.get(item.productId) : undefined;
@@ -289,7 +216,7 @@ export class OrdersService {
             if (product.status === ProductStatus.OUT_OF_STOCK && product.stock > 0) {
                 product.status = ProductStatus.ACTIVE;
             }
-            await manager.save(Product, product);
+            await uow.saveProduct(product);
         }
     }
 
@@ -308,14 +235,13 @@ export class OrdersService {
     }
 
     /** Mã đơn: DH + ngày + 6 ký tự ngẫu nhiên; thử lại nếu trùng. */
-    private async generateCode(manager: EntityManager): Promise<string> {
+    private async generateCode(uow: OrdersUnitOfWork): Promise<string> {
         const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
         for (let attempt = 0; attempt < CODE_RETRY_LIMIT; attempt += 1) {
             const random = Math.random().toString(36).slice(2, 8).toUpperCase();
             const code = `DH${datePart}-${random}`;
-            const exists = await manager.exists(Order, { where: { code }, withDeleted: true });
-            if (!exists) return code;
+            if (!(await uow.codeExists(code))) return code;
         }
         throw new BadRequestException('Không sinh được mã đơn hàng, vui lòng thử lại');
     }

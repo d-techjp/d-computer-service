@@ -1,22 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { resolveSortColumn } from '../../common/utils/query.util';
 import { slugify } from '../../common/utils/slug.util';
+import { CategoriesRepository } from './domain/categories.repository';
 import type { CreateCategoryDto } from './dto/create-category.dto';
 import type { QueryCategoryDto } from './dto/query-category.dto';
 import type { UpdateCategoryDto } from './dto/update-category.dto';
 import { Category } from './entities/category.entity';
 
-const SORTABLE_COLUMNS = ['createdAt', 'updatedAt', 'name', 'sortOrder'] as const;
-
 @Injectable()
 export class CategoriesService {
-    constructor(
-        @InjectRepository(Category)
-        private readonly categoriesRepository: Repository<Category>,
-    ) {}
+    constructor(private readonly categoriesRepository: CategoriesRepository) {}
 
     async create(dto: CreateCategoryDto): Promise<Category> {
         const slug = await this.resolveSlug(dto.slug ?? dto.name);
@@ -27,37 +20,13 @@ export class CategoriesService {
     }
 
     async findAll(query: QueryCategoryDto): Promise<PaginatedResult<Category>> {
-        const qb = this.categoriesRepository
-            .createQueryBuilder('category')
-            .leftJoin('category.parent', 'parent')
-            .addSelect(['parent.id', 'parent.name', 'parent.slug']);
-
-        if (query.search) {
-            qb.andWhere('(category.name ILIKE :search OR category.slug ILIKE :search)', {
-                search: `%${query.search}%`,
-            });
-        }
-        if (query.rootOnly) qb.andWhere('category.parentId IS NULL');
-        else if (query.parentId)
-            qb.andWhere('category.parentId = :parentId', { parentId: query.parentId });
-
-        if (query.isActive !== undefined) {
-            qb.andWhere('category.isActive = :isActive', { isActive: query.isActive });
-        }
-
-        const sortBy = resolveSortColumn(query.sortBy, SORTABLE_COLUMNS, 'sortOrder');
-        qb.orderBy(`category.${sortBy}`, query.sortOrder).skip(query.skip).take(query.limit);
-
-        const [items, total] = await qb.getManyAndCount();
-        return new PaginatedResult(items, total, query.page, query.limit);
+        const page = await this.categoriesRepository.search(query);
+        return new PaginatedResult(page.items, page.total, query.page, query.limit);
     }
 
     /** Trả cây danh mục 1 lần truy vấn rồi dựng quan hệ cha-con trong bộ nhớ. */
     async findTree(onlyActive = true): Promise<Category[]> {
-        const categories = await this.categoriesRepository.find({
-            where: onlyActive ? { isActive: true } : {},
-            order: { sortOrder: 'ASC', name: 'ASC' },
-        });
+        const categories = await this.categoriesRepository.findAllForTree(onlyActive);
 
         const byId = new Map<string, Category>();
         for (const category of categories) {
@@ -75,19 +44,13 @@ export class CategoriesService {
     }
 
     async findOne(id: string): Promise<Category> {
-        const category = await this.categoriesRepository.findOne({
-            where: { id },
-            relations: { parent: true, children: true },
-        });
+        const category = await this.categoriesRepository.findById(id);
         if (!category) throw new NotFoundException(`Không tìm thấy danh mục với id ${id}`);
         return category;
     }
 
     async findBySlug(slug: string): Promise<Category> {
-        const category = await this.categoriesRepository.findOne({
-            where: { slug },
-            relations: { parent: true, children: true },
-        });
+        const category = await this.categoriesRepository.findBySlug(slug);
         if (!category) throw new NotFoundException(`Không tìm thấy danh mục với slug ${slug}`);
         return category;
     }
@@ -113,7 +76,7 @@ export class CategoriesService {
     async remove(id: string): Promise<void> {
         const category = await this.findOne(id);
 
-        const childCount = await this.categoriesRepository.count({ where: { parentId: id } });
+        const childCount = await this.categoriesRepository.countByParentId(id);
         if (childCount > 0) {
             throw new BadRequestException(
                 'Không thể xoá danh mục đang có danh mục con — hãy xoá hoặc chuyển danh mục con trước',
@@ -129,19 +92,11 @@ export class CategoriesService {
 
         let candidate = base;
         let suffix = 1;
-        while (await this.slugTaken(candidate, excludeId)) {
+        while ((await this.categoriesRepository.countBySlug(candidate, excludeId)) > 0) {
             suffix += 1;
             candidate = `${base}-${suffix}`;
         }
         return candidate;
-    }
-
-    private async slugTaken(slug: string, excludeId?: string): Promise<boolean> {
-        const count = await this.categoriesRepository.count({
-            where: excludeId ? { slug, id: Not(excludeId) } : { slug },
-            withDeleted: false,
-        });
-        return count > 0;
     }
 
     /** Chặn tự làm cha của chính mình và chặn tạo vòng lặp cha-con. */
@@ -166,11 +121,8 @@ export class CategoriesService {
         let frontier = [rootId];
 
         while (frontier.length > 0) {
-            const children = await this.categoriesRepository.find({
-                where: frontier.map((parentId) => ({ parentId })),
-                select: { id: true },
-            });
-            frontier = children.map((child) => child.id).filter((childId) => !result.has(childId));
+            const childIds = await this.categoriesRepository.findIdsByParentIds(frontier);
+            frontier = childIds.filter((childId) => !result.has(childId));
             for (const childId of frontier) result.add(childId);
         }
         return result;
@@ -183,6 +135,6 @@ export class CategoriesService {
     }
 
     async countActive(): Promise<number> {
-        return this.categoriesRepository.count({ where: { isActive: true, parentId: IsNull() } });
+        return this.categoriesRepository.countActiveRoots();
     }
 }

@@ -4,32 +4,22 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Not, Repository } from 'typeorm';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
-import { resolveSortColumn } from '../../common/utils/query.util';
 import { slugify } from '../../common/utils/slug.util';
 import { BrandsService } from '../brands/brands.service';
 import { CategoriesService } from '../categories/categories.service';
+import { ProductsRepository } from './domain/products.repository';
 import type { CreateProductDto } from './dto/create-product.dto';
 import type { QueryProductDto } from './dto/query-product.dto';
 import type { UpdateProductDto } from './dto/update-product.dto';
 import { Product, ProductStatus } from './entities/product.entity';
 
-const SORTABLE_COLUMNS = [
-    'createdAt',
-    'updatedAt',
-    'name',
-    'price',
-    'stock',
-    'soldCount',
-    'viewCount',
-] as const;
+const LOW_STOCK_LIMIT = 50;
 
 @Injectable()
 export class ProductsService {
     constructor(
-        @InjectRepository(Product) private readonly productsRepository: Repository<Product>,
+        private readonly productsRepository: ProductsRepository,
         private readonly categoriesService: CategoriesService,
         private readonly brandsService: BrandsService,
     ) {}
@@ -47,75 +37,33 @@ export class ProductsService {
     }
 
     async findAll(query: QueryProductDto): Promise<PaginatedResult<Product>> {
-        const qb = this.productsRepository
-            .createQueryBuilder('product')
-            .leftJoin('product.category', 'category')
-            .addSelect(['category.id', 'category.name', 'category.slug'])
-            .leftJoin('product.brand', 'brand')
-            .addSelect(['brand.id', 'brand.name', 'brand.slug']);
+        // Resolve cây danh mục ở tầng service (nghiệp vụ) — repository chỉ lọc theo id phẳng
+        const categoryIds =
+            query.categoryId && query.includeSubCategories
+                ? await this.categoriesService.collectSubtreeIds(query.categoryId)
+                : undefined;
 
-        if (query.search) {
-            qb.andWhere(
-                '(product.name ILIKE :search OR product.sku ILIKE :search OR product.shortDescription ILIKE :search)',
-                { search: `%${query.search}%` },
-            );
-        }
-
-        if (query.categoryId) {
-            if (query.includeSubCategories) {
-                const ids = await this.categoriesService.collectSubtreeIds(query.categoryId);
-                qb.andWhere('product.categoryId IN (:...categoryIds)', { categoryIds: ids });
-            } else {
-                qb.andWhere('product.categoryId = :categoryId', { categoryId: query.categoryId });
-            }
-        }
-
-        if (query.brandId) qb.andWhere('product.brandId = :brandId', { brandId: query.brandId });
-        if (query.status) qb.andWhere('product.status = :status', { status: query.status });
-        if (query.minPrice !== undefined) {
-            qb.andWhere('product.price >= :minPrice', { minPrice: query.minPrice });
-        }
-        if (query.maxPrice !== undefined) {
-            qb.andWhere('product.price <= :maxPrice', { maxPrice: query.maxPrice });
-        }
-        if (query.inStock !== undefined) {
-            qb.andWhere(query.inStock ? 'product.stock > 0' : 'product.stock <= 0');
-        }
-        if (query.isFeatured !== undefined) {
-            qb.andWhere('product.isFeatured = :isFeatured', { isFeatured: query.isFeatured });
-        }
-
-        const sortBy = resolveSortColumn(query.sortBy, SORTABLE_COLUMNS, 'createdAt');
-        qb.orderBy(`product.${sortBy}`, query.sortOrder).skip(query.skip).take(query.limit);
-
-        const [items, total] = await qb.getManyAndCount();
-        return new PaginatedResult(items, total, query.page, query.limit);
+        const page = await this.productsRepository.search(query, categoryIds);
+        return new PaginatedResult(page.items, page.total, query.page, query.limit);
     }
 
     async findOne(id: string): Promise<Product> {
-        const product = await this.productsRepository.findOne({
-            where: { id },
-            relations: { category: true, brand: true },
-        });
+        const product = await this.productsRepository.findById(id);
         if (!product) throw new NotFoundException(`Không tìm thấy sản phẩm với id ${id}`);
         return product;
     }
 
     async findBySlug(slug: string): Promise<Product> {
-        const product = await this.productsRepository.findOne({
-            where: { slug },
-            relations: { category: true, brand: true },
-        });
+        const product = await this.productsRepository.findBySlug(slug);
         if (!product) throw new NotFoundException(`Không tìm thấy sản phẩm với slug ${slug}`);
 
         // Đếm lượt xem không chặn response và không đụng tới updatedAt
-        await this.productsRepository.increment({ id: product.id }, 'viewCount', 1);
+        await this.productsRepository.incrementViewCount(product.id);
         return product;
     }
 
     findByIds(ids: string[]): Promise<Product[]> {
-        if (ids.length === 0) return Promise.resolve([]);
-        return this.productsRepository.find({ where: { id: In(ids) } });
+        return this.productsRepository.findByIds(ids);
     }
 
     async update(id: string, dto: UpdateProductDto): Promise<Product> {
@@ -166,14 +114,8 @@ export class ProductsService {
     }
 
     /** Sản phẩm có tồn kho <= ngưỡng cảnh báo. */
-    findLowStock(limit = 50): Promise<Product[]> {
-        return this.productsRepository
-            .createQueryBuilder('product')
-            .where('product.stock <= product.lowStockThreshold')
-            .andWhere('product.status != :archived', { archived: ProductStatus.ARCHIVED })
-            .orderBy('product.stock', 'ASC')
-            .take(limit)
-            .getMany();
+    findLowStock(): Promise<Product[]> {
+        return this.productsRepository.findLowStock(LOW_STOCK_LIMIT);
     }
 
     private assertPriceConsistent(price: number, compareAtPrice: number | null | undefined): void {
@@ -183,9 +125,7 @@ export class ProductsService {
     }
 
     private async assertSkuAvailable(sku: string, excludeId?: string): Promise<void> {
-        const count = await this.productsRepository.count({
-            where: excludeId ? { sku, id: Not(excludeId) } : { sku },
-        });
+        const count = await this.productsRepository.countBySku(sku, excludeId);
         if (count > 0) throw new ConflictException(`SKU ${sku} đã tồn tại`);
     }
 
@@ -203,11 +143,7 @@ export class ProductsService {
 
         let candidate = base;
         let suffix = 1;
-        while (
-            (await this.productsRepository.count({
-                where: excludeId ? { slug: candidate, id: Not(excludeId) } : { slug: candidate },
-            })) > 0
-        ) {
+        while ((await this.productsRepository.countBySlug(candidate, excludeId)) > 0) {
             suffix += 1;
             candidate = `${base}-${suffix}`;
         }
