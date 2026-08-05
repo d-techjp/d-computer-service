@@ -68,6 +68,23 @@ export const toStringArray = ({ value }: TransformFnParams): unknown => {
     return [trimmed];
 };
 
+/**
+ * Mảng object lồng nhau (vd `variants`, `options`) gửi qua multipart chỉ có thể
+ * là JSON string — parse về mảng thật để `@ValidateNested` chạy được. JSON body
+ * gửi mảng trực tiếp thì giữ nguyên.
+ */
+export const toJsonArray = ({ value }: TransformFnParams): unknown => {
+    const raw: unknown = value;
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    if (typeof raw !== 'string') return raw;
+
+    try {
+        return JSON.parse(raw) as unknown;
+    } catch {
+        return raw; // để @IsArray báo lỗi thay vì nuốt im lặng
+    }
+};
+
 /** Form-data nhận object dưới dạng JSON string, JSON body thì giữ nguyên. */
 export const toJsonObject = ({ value }: TransformFnParams): unknown => {
     const raw: unknown = value;

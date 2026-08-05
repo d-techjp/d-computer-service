@@ -1,9 +1,4 @@
-import {
-    BadRequestException,
-    ConflictException,
-    Injectable,
-    NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
 import { slugify } from '../../common/utils/slug.util';
 import { BrandsService } from '../brands/brands.service';
@@ -15,9 +10,8 @@ import { ProductsRepository } from './domain/products.repository';
 import type { CreateProductDto } from './dto/create-product.dto';
 import type { QueryProductDto } from './dto/query-product.dto';
 import type { UpdateProductDto } from './dto/update-product.dto';
-import { Product, ProductStatus } from './entities/product.entity';
-
-const LOW_STOCK_LIMIT = 50;
+import { Product, ProductType } from './entities/product.entity';
+import { ProductVariantsService } from './product-variants.service';
 
 export interface ProductImageFiles {
     thumbnailFile?: Express.Multer.File;
@@ -29,29 +23,47 @@ export interface ProductDescriptionView {
     content: string;
 }
 
+/**
+ * Quản lý product master. Mọi thao tác trên hàng bán được (giá, kho, SKU) nằm
+ * ở `ProductVariantsService` — service này chỉ chạm tới biến thể đúng một lần,
+ * lúc tạo sản phẩm, để master và biến thể đầu tiên ra đời trong cùng một lần lưu.
+ */
 @Injectable()
 export class ProductsService {
     constructor(
         private readonly productsRepository: ProductsRepository,
         private readonly productDescriptionsRepository: ProductDescriptionsRepository,
+        private readonly variantsService: ProductVariantsService,
         private readonly categoriesService: CategoriesService,
         private readonly brandsService: BrandsService,
         private readonly uploadsService: UploadsService,
     ) {}
 
     async create(dto: CreateProductDto, files?: ProductImageFiles): Promise<Product> {
-        await this.assertSkuAvailable(dto.sku);
         await this.assertRelationsExist(dto.categoryId, dto.brandId);
-        this.assertPriceConsistent(dto.price, dto.compareAtPrice);
+
+        const productType = dto.productType ?? ProductType.STANDARD;
+        const { variants: variantInputs, ...master } = dto;
+        const variants = await this.variantsService.buildForNewProduct(
+            productType,
+            dto.name,
+            variantInputs,
+        );
 
         const { thumbnail, images } = await this.resolveImages(dto, files);
-        const product = this.productsRepository.create({
-            ...dto,
-            thumbnail,
-            images,
-            slug: await this.resolveSlug(dto.slug ?? dto.name),
-        });
-        return this.productsRepository.save(product);
+        const product = await this.productsRepository.save(
+            this.productsRepository.create({
+                ...master,
+                productType,
+                thumbnail,
+                images,
+                slug: await this.resolveSlug(dto.slug ?? dto.name),
+                variants, // cascade: ['insert'] — master + biến thể lưu cùng một lần
+            }),
+        );
+
+        await this.productsRepository.refreshAggregates(product.id);
+        return this.findOne(product.id);
     }
 
     async findAll(query: QueryProductDto): Promise<PaginatedResult<Product>> {
@@ -86,13 +98,7 @@ export class ProductsService {
 
     async update(id: string, dto: UpdateProductDto, files?: ProductImageFiles): Promise<Product> {
         const product = await this.findOne(id);
-
-        if (dto.sku && dto.sku !== product.sku) await this.assertSkuAvailable(dto.sku, id);
         await this.assertRelationsExist(dto.categoryId, dto.brandId);
-        this.assertPriceConsistent(
-            dto.price ?? product.price,
-            dto.compareAtPrice ?? product.compareAtPrice,
-        );
 
         if (dto.slug && dto.slug !== product.slug) {
             product.slug = await this.resolveSlug(dto.slug, id);
@@ -109,38 +115,12 @@ export class ProductsService {
         if (images !== undefined) rest.images = images;
 
         Object.assign(product, rest);
-        return this.productsRepository.save(product);
+        await this.productsRepository.save(product);
+        return this.findOne(id);
     }
 
     async remove(id: string): Promise<void> {
         await this.productsRepository.softRemove(await this.findOne(id));
-    }
-
-    /** Điều chỉnh tồn kho thủ công (nhập hàng, kiểm kê). `delta` âm để trừ. */
-    async adjustStock(id: string, delta: number, reason?: string): Promise<Product> {
-        const product = await this.findOne(id);
-        const nextStock = product.stock + delta;
-
-        if (nextStock < 0) {
-            throw new BadRequestException(
-                `Tồn kho không đủ: hiện có ${product.stock}, yêu cầu giảm ${Math.abs(delta)}`,
-            );
-        }
-
-        product.stock = nextStock;
-        if (nextStock === 0 && product.status === ProductStatus.ACTIVE) {
-            product.status = ProductStatus.OUT_OF_STOCK;
-        } else if (nextStock > 0 && product.status === ProductStatus.OUT_OF_STOCK) {
-            product.status = ProductStatus.ACTIVE;
-        }
-
-        void reason; // reason được ghi ở activity log qua interceptor
-        return this.productsRepository.save(product);
-    }
-
-    /** Sản phẩm có tồn kho <= ngưỡng cảnh báo. */
-    findLowStock(): Promise<Product[]> {
-        return this.productsRepository.findLowStock(LOW_STOCK_LIMIT);
     }
 
     async getDescription(productId: string): Promise<ProductDescriptionView> {
@@ -153,17 +133,6 @@ export class ProductsService {
         await this.findOne(productId);
         const description = await this.productDescriptionsRepository.upsert(productId, content);
         return { productId, content: description.content };
-    }
-
-    private assertPriceConsistent(price: number, compareAtPrice: number | null | undefined): void {
-        if (compareAtPrice !== null && compareAtPrice !== undefined && compareAtPrice < price) {
-            throw new BadRequestException('compareAtPrice phải lớn hơn hoặc bằng price');
-        }
-    }
-
-    private async assertSkuAvailable(sku: string, excludeId?: string): Promise<void> {
-        const count = await this.productsRepository.countBySku(sku, excludeId);
-        if (count > 0) throw new ConflictException(`SKU ${sku} đã tồn tại`);
     }
 
     private async assertRelationsExist(

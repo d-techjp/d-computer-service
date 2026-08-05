@@ -27,9 +27,13 @@ export abstract class ProductsRepository {
 
     abstract incrementViewCount(id: string): Promise<void>;
 
-    abstract findLowStock(limit: number): Promise<Product[]>;
-
-    abstract countBySku(sku: string, excludeId?: string): Promise<number>;
-
     abstract countBySlug(slug: string, excludeId?: string): Promise<number>;
+
+    /**
+     * Ghi lại các cột read-model (`min_price`, `max_price`, `total_stock`,
+     * `has_variants`) từ biến thể hiện có. Chạy bằng một câu UPDATE ... FROM
+     * duy nhất để không đọc-rồi-ghi (tránh mất cập nhật khi hai request cùng
+     * sửa biến thể của một sản phẩm).
+     */
+    abstract refreshAggregates(productId: string): Promise<void>;
 }

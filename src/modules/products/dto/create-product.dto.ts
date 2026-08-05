@@ -1,18 +1,11 @@
-import {
-    toBoolean,
-    toJsonObject,
-    toStringArray,
-    toTrimmed,
-    toUpperTrimmed,
-} from '../../../common/transformers/transform.helpers';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+    ArrayMaxSize,
+    ArrayMinSize,
     IsArray,
     IsBoolean,
     IsEnum,
-    IsInt,
-    IsNumber,
     IsObject,
     IsOptional,
     IsString,
@@ -20,13 +13,30 @@ import {
     IsUrl,
     Matches,
     MaxLength,
-    Min,
     MinLength,
+    ValidateNested,
 } from 'class-validator';
+import {
+    toBoolean,
+    toJsonArray,
+    toJsonObject,
+    toStringArray,
+    toTrimmed,
+} from '../../../common/transformers/transform.helpers';
 import { SLUG_MESSAGE, SLUG_RULE } from '../../categories/dto/create-category.dto';
 import { MAX_IMAGES_PER_REQUEST } from '../../uploads/constants/upload.constants';
-import { ProductStatus } from '../entities/product.entity';
+import { ProductStatus, ProductType } from '../entities/product.entity';
+import { CreateVariantDto } from './create-variant.dto';
 
+/**
+ * Tạo product master KÈM ít nhất một biến thể. Không cho tạo product "rỗng":
+ * product không có variant nào là hàng không bán được, chỉ làm bẩn danh sách
+ * và làm hỏng mọi phép tính giá/tồn kho ở tầng đọc.
+ *
+ * Sản phẩm đơn giản -> gửi đúng 1 phần tử trong `variants`.
+ * Sản phẩm nhiều cấu hình -> gửi nhiều phần tử, hoặc gửi 1 rồi khai option và
+ * dùng `POST /products/:id/variants/generate` để sinh phần còn lại.
+ */
 export class CreateProductDto {
     @ApiProperty({ example: 'Laptop Dell Vostro 3520' })
     @Transform(toTrimmed)
@@ -42,57 +52,16 @@ export class CreateProductDto {
     @IsOptional()
     slug?: string;
 
-    @ApiProperty({ example: 'DELL-V3520-I5' })
-    @Transform(toUpperTrimmed)
-    @IsString()
-    @MinLength(2)
-    @MaxLength(100)
-    sku: string;
+    @ApiPropertyOptional({ enum: ProductType, default: ProductType.STANDARD })
+    @IsEnum(ProductType)
+    @IsOptional()
+    productType?: ProductType;
 
     @ApiPropertyOptional()
     @IsString()
     @MaxLength(500)
     @IsOptional()
     shortDescription?: string;
-
-    @ApiPropertyOptional()
-    @IsString()
-    @IsOptional()
-    description?: string;
-
-    @ApiProperty({ example: 15990000 })
-    @Type(() => Number)
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    price: number;
-
-    @ApiPropertyOptional({ example: 17990000 })
-    @Type(() => Number)
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    @IsOptional()
-    compareAtPrice?: number;
-
-    @ApiPropertyOptional({ example: 12000000 })
-    @Type(() => Number)
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    @IsOptional()
-    costPrice?: number;
-
-    @ApiPropertyOptional({ example: 25, default: 0 })
-    @Type(() => Number)
-    @IsInt()
-    @Min(0)
-    @IsOptional()
-    stock?: number;
-
-    @ApiPropertyOptional({ example: 5, default: 0 })
-    @Type(() => Number)
-    @IsInt()
-    @Min(0)
-    @IsOptional()
-    lowStockThreshold?: number;
 
     @ApiPropertyOptional({
         example: 'https://cdn.dcomputer.local/products/dell-vostro-3520.jpg',
@@ -137,7 +106,10 @@ export class CreateProductDto {
     @IsOptional()
     imagesFiles?: unknown;
 
-    @ApiPropertyOptional({ example: { CPU: 'Intel Core i5-1235U', RAM: '16GB DDR4' } })
+    @ApiPropertyOptional({
+        example: { CPU: 'Intel Core i5-1235U' },
+        description: 'Thông số DÙNG CHUNG mọi biến thể. Thông số khác nhau thì khai bằng option.',
+    })
     @Transform(toJsonObject)
     @IsObject()
     @IsOptional()
@@ -163,4 +135,18 @@ export class CreateProductDto {
     @IsUUID()
     @IsOptional()
     brandId?: string;
+
+    @ApiProperty({
+        type: [CreateVariantDto],
+        description:
+            'Ít nhất 1 biến thể. Qua multipart thì gửi dưới dạng chuỗi JSON của mảng. ' +
+            'Không phần tử nào đặt `isDefault` thì phần tử đầu tiên được chọn làm mặc định.',
+    })
+    @Transform(toJsonArray)
+    @IsArray()
+    @ArrayMinSize(1, { message: 'Sản phẩm phải có ít nhất 1 biến thể' })
+    @ArrayMaxSize(100)
+    @ValidateNested({ each: true })
+    @Type(() => CreateVariantDto)
+    variants: CreateVariantDto[];
 }

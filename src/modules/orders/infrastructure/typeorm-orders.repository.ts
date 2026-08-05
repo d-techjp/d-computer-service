@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, type EntityManager, Repository } from 'typeorm';
+import { DataSource, type EntityManager, In, Repository } from 'typeorm';
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import { resolveSortColumn } from '../../../common/utils/query.util';
-import { Product } from '../../products/entities/product.entity';
+import { ProductBundleItem } from '../../products/entities/product-bundle-item.entity';
+import { ProductVariant } from '../../products/entities/product-variant.entity';
+import { refreshProductAggregates } from '../../products/infrastructure/product-aggregates';
 import { OrdersRepository, type OrdersUnitOfWork } from '../domain/orders.repository';
 import type { QueryOrderDto } from '../dto/query-order.dto';
 import { OrderItem } from '../entities/order-item.entity';
@@ -85,9 +87,24 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
 
     private buildUnitOfWork(manager: EntityManager): OrdersUnitOfWork {
         return {
-            lockProducts: (productIds) => this.lockProducts(manager, productIds),
-            saveProduct: (product) => manager.save(Product, product),
+            lockVariants: (variantIds) => this.lockVariants(manager, variantIds),
+            findBundleItems: (bundleVariantIds) =>
+                bundleVariantIds.length === 0
+                    ? Promise.resolve([])
+                    : manager.find(ProductBundleItem, {
+                          where: { bundleVariantId: In(bundleVariantIds) },
+                          relations: { componentVariant: true },
+                          order: { position: 'ASC' },
+                      }),
+            saveVariant: (variant) => manager.save(ProductVariant, variant),
+            refreshProductAggregates: async (productIds) => {
+                for (const productId of new Set(productIds)) {
+                    await refreshProductAggregates(manager, productId);
+                }
+            },
             createOrderItem: (data) => manager.create(OrderItem, data),
+            saveOrderItems: (items) =>
+                items.length === 0 ? Promise.resolve([]) : manager.save(OrderItem, items),
             createOrder: (data) => manager.create(Order, data),
             saveOrder: (order) => manager.save(Order, order),
             findOrderWithItems: (id) =>
@@ -96,21 +113,27 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
         };
     }
 
-    /** SELECT ... FOR UPDATE theo thứ tự id cố định để tránh deadlock giữa các transaction. */
-    private async lockProducts(
+    /**
+     * SELECT ... FOR UPDATE theo thứ tự id cố định để tránh deadlock giữa các
+     * transaction. Dùng `setLock('pessimistic_write', undefined, ['variant'])`
+     * để chỉ khoá hàng của `product_variants` — join `product` chỉ để đọc, khoá
+     * luôn cả bảng product sẽ chặn oan mọi đơn khác của cùng sản phẩm.
+     */
+    private async lockVariants(
         manager: EntityManager,
-        productIds: string[],
-    ): Promise<Map<string, Product>> {
-        const uniqueIds = [...new Set(productIds)].sort();
+        variantIds: string[],
+    ): Promise<Map<string, ProductVariant>> {
+        const uniqueIds = [...new Set(variantIds)].sort();
         if (uniqueIds.length === 0) throw new BadRequestException('Đơn hàng không có sản phẩm nào');
 
-        const products = await manager
-            .createQueryBuilder(Product, 'product')
-            .setLock('pessimistic_write')
-            .where('product.id IN (:...ids)', { ids: uniqueIds })
-            .orderBy('product.id', 'ASC')
+        const variants = await manager
+            .createQueryBuilder(ProductVariant, 'variant')
+            .setLock('pessimistic_write', undefined, ['variant'])
+            .innerJoinAndSelect('variant.product', 'product')
+            .where('variant.id IN (:...ids)', { ids: uniqueIds })
+            .orderBy('variant.id', 'ASC')
             .getMany();
 
-        return new Map(products.map((product) => [product.id, product]));
+        return new Map(variants.map((variant) => [variant.id, variant]));
     }
 }

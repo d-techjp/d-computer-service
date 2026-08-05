@@ -19,9 +19,14 @@ import {
 import { PaymentMethod } from '../enums/order.enum';
 
 export class OrderItemInputDto {
-    @ApiProperty({ format: 'uuid' })
+    @ApiProperty({
+        format: 'uuid',
+        description:
+            'Id của ProductVariant (KHÔNG phải product). Sản phẩm không có biến thể thì dùng ' +
+            'variant mặc định — có sẵn trong `variants[0]` của mọi response product.',
+    })
     @IsUUID()
-    productId: string;
+    variantId: string;
 
     @ApiProperty({ example: 2, minimum: 1 })
     @Type(() => Number)
