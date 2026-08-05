@@ -10,6 +10,7 @@ import {
     ParseUUIDPipe,
     Patch,
     Post,
+    Put,
     Query,
     UploadedFiles,
     UseInterceptors,
@@ -27,9 +28,10 @@ import { buildImageMulterOptions } from '../uploads/multer-options';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
+import { UpdateProductDescriptionDto } from './dto/update-product-description.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
-import type { ProductImageFiles } from './products.service';
+import type { ProductDescriptionView, ProductImageFiles } from './products.service';
 import { ProductsService } from './products.service';
 
 /** Multer field cho `thumbnailFile`/`imagesFiles` + khai multipart cho Swagger — dùng chung create/update. */
@@ -81,6 +83,27 @@ export class ProductsController {
     @ApiOperation({ summary: 'Chi tiết sản phẩm theo id (public)' })
     findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Product> {
         return this.productsService.findOne(id);
+    }
+
+    @Public()
+    @Get(':id/description')
+    @ApiOperation({ summary: 'Mô tả chi tiết sản phẩm dạng HTML (public)' })
+    getDescription(@Param('id', ParseUUIDPipe) id: string): Promise<ProductDescriptionView> {
+        return this.productsService.getDescription(id);
+    }
+
+    @ApiBearerAuth()
+    @Put(':id/description')
+    @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
+    @LogActivity({ action: ActivityAction.UPDATE, resource: 'product_description' })
+    @ApiOperation({
+        summary: 'Cập nhật mô tả chi tiết sản phẩm (HTML, soạn bằng rich text editor)',
+    })
+    updateDescription(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: UpdateProductDescriptionDto,
+    ): Promise<ProductDescriptionView> {
+        return this.productsService.updateDescription(id, dto.content);
     }
 
     @ApiBearerAuth()

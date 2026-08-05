@@ -10,6 +10,7 @@ import { BrandsService } from '../brands/brands.service';
 import { CategoriesService } from '../categories/categories.service';
 import { UploadFolder } from '../uploads/constants/upload.constants';
 import { UploadsService } from '../uploads/uploads.service';
+import { ProductDescriptionsRepository } from './domain/product-descriptions.repository';
 import { ProductsRepository } from './domain/products.repository';
 import type { CreateProductDto } from './dto/create-product.dto';
 import type { QueryProductDto } from './dto/query-product.dto';
@@ -23,10 +24,16 @@ export interface ProductImageFiles {
     imagesFiles?: Express.Multer.File[];
 }
 
+export interface ProductDescriptionView {
+    productId: string;
+    content: string;
+}
+
 @Injectable()
 export class ProductsService {
     constructor(
         private readonly productsRepository: ProductsRepository,
+        private readonly productDescriptionsRepository: ProductDescriptionsRepository,
         private readonly categoriesService: CategoriesService,
         private readonly brandsService: BrandsService,
         private readonly uploadsService: UploadsService,
@@ -134,6 +141,18 @@ export class ProductsService {
     /** Sản phẩm có tồn kho <= ngưỡng cảnh báo. */
     findLowStock(): Promise<Product[]> {
         return this.productsRepository.findLowStock(LOW_STOCK_LIMIT);
+    }
+
+    async getDescription(productId: string): Promise<ProductDescriptionView> {
+        await this.findOne(productId);
+        const description = await this.productDescriptionsRepository.findByProductId(productId);
+        return { productId, content: description?.content ?? '' };
+    }
+
+    async updateDescription(productId: string, content: string): Promise<ProductDescriptionView> {
+        await this.findOne(productId);
+        const description = await this.productDescriptionsRepository.upsert(productId, content);
+        return { productId, content: description.content };
     }
 
     private assertPriceConsistent(price: number, compareAtPrice: number | null | undefined): void {
