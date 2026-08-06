@@ -5,8 +5,8 @@ import { Product } from './product.entity';
 
 /**
  * Mô tả chi tiết sản phẩm (HTML, soạn bằng rich text editor — giống Article.content).
- * Tách khỏi `products.description` (chỉ dùng cho đoạn mô tả ngắn) để tránh load
- * nội dung HTML nặng mỗi lần truy vấn danh sách/sản phẩm.
+ * Tách khỏi `products` để tránh load nội dung HTML nặng mỗi lần truy vấn
+ * danh sách/sản phẩm.
  */
 @Entity('product_descriptions')
 export class ProductDescription extends BaseEntity {

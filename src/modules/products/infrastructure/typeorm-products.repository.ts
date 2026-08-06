@@ -5,17 +5,43 @@ import type { RepositoryPage } from '../../../common/interfaces/repository-page.
 import { resolveSortColumn } from '../../../common/utils/query.util';
 import { ProductsRepository } from '../domain/products.repository';
 import type { QueryProductDto } from '../dto/query-product.dto';
-import { Product, ProductStatus } from '../entities/product.entity';
+import { Product } from '../entities/product.entity';
+import { refreshProductAggregates } from './product-aggregates';
 
 const SORTABLE_COLUMNS = [
     'createdAt',
     'updatedAt',
     'name',
-    'price',
-    'stock',
+    'minPrice',
+    'totalStock',
     'soldCount',
     'viewCount',
 ] as const;
+
+/** Chi tiết sản phẩm nạp kèm toàn bộ biến thể + tổ hợp option của từng biến thể. */
+const DETAIL_RELATIONS = {
+    category: true,
+    brand: true,
+    variants: { optionValues: { option: true } },
+    options: { values: true },
+} as const;
+
+const DETAIL_ORDER = {
+    variants: {
+        position: 'ASC',
+        createdAt: 'ASC',
+        optionValues: {
+            position: 'ASC',
+            createdAt: 'ASC',
+            option: { position: 'ASC', createdAt: 'ASC' },
+        },
+    },
+    options: {
+        position: 'ASC',
+        createdAt: 'ASC',
+        values: { position: 'ASC', createdAt: 'ASC' },
+    },
+} as const;
 
 @Injectable()
 export class TypeOrmProductsRepository extends ProductsRepository {
@@ -40,11 +66,22 @@ export class TypeOrmProductsRepository extends ProductsRepository {
             .leftJoin('product.category', 'category')
             .addSelect(['category.id', 'category.name', 'category.slug'])
             .leftJoin('product.brand', 'brand')
-            .addSelect(['brand.id', 'brand.name', 'brand.slug']);
+            .addSelect(['brand.id', 'brand.name', 'brand.slug'])
+            // Danh sách chỉ cần biến thể mặc định: FE hiển thị giá và có sẵn
+            // variantId để "mua ngay" mà không phải gọi thêm API chi tiết.
+            // -> `product.variants` ở response danh sách CHỈ chứa 1 phần tử.
+            .leftJoinAndSelect(
+                'product.variants',
+                'variant',
+                'variant.is_default = true AND variant.deleted_at IS NULL',
+            );
 
         if (criteria.search) {
             qb.andWhere(
-                '(product.name ILIKE :search OR product.sku ILIKE :search OR product.shortDescription ILIKE :search)',
+                '(product.name ILIKE :search OR product.shortDescription ILIKE :search' +
+                    ' OR EXISTS (SELECT 1 FROM product_variants sv' +
+                    ' WHERE sv.product_id = product.id AND sv.deleted_at IS NULL' +
+                    ' AND sv.sku ILIKE :search))',
                 { search: `%${criteria.search}%` },
             );
         }
@@ -58,20 +95,29 @@ export class TypeOrmProductsRepository extends ProductsRepository {
         if (criteria.brandId)
             qb.andWhere('product.brandId = :brandId', { brandId: criteria.brandId });
         if (criteria.status) qb.andWhere('product.status = :status', { status: criteria.status });
+        if (criteria.productType) {
+            qb.andWhere('product.productType = :productType', {
+                productType: criteria.productType,
+            });
+        }
+        // Lọc theo khoảng giá dùng cột read-model: sản phẩm lọt lưới khi khoảng
+        // giá [minPrice, maxPrice] của nó giao với khoảng người dùng yêu cầu.
         if (criteria.minPrice !== undefined) {
-            qb.andWhere('product.price >= :minPrice', { minPrice: criteria.minPrice });
+            qb.andWhere('product.maxPrice >= :minPrice', { minPrice: criteria.minPrice });
         }
         if (criteria.maxPrice !== undefined) {
-            qb.andWhere('product.price <= :maxPrice', { maxPrice: criteria.maxPrice });
+            qb.andWhere('product.minPrice <= :maxPrice', { maxPrice: criteria.maxPrice });
         }
         if (criteria.inStock !== undefined) {
-            qb.andWhere(criteria.inStock ? 'product.stock > 0' : 'product.stock <= 0');
+            qb.andWhere(criteria.inStock ? 'product.totalStock > 0' : 'product.totalStock <= 0');
         }
         if (criteria.isFeatured !== undefined) {
             qb.andWhere('product.isFeatured = :isFeatured', { isFeatured: criteria.isFeatured });
         }
 
         const sortBy = resolveSortColumn(criteria.sortBy, SORTABLE_COLUMNS, 'createdAt');
+        // skip/take (không phải offset/limit) để phân trang theo sản phẩm,
+        // không bị lệch vì join bảng variants quan hệ 1-n
         qb.orderBy(`product.${sortBy}`, criteria.sortOrder)
             .skip(criteria.skip)
             .take(criteria.limit);
@@ -81,11 +127,19 @@ export class TypeOrmProductsRepository extends ProductsRepository {
     }
 
     findById(id: string): Promise<Product | null> {
-        return this.repo.findOne({ where: { id }, relations: { category: true, brand: true } });
+        return this.repo.findOne({
+            where: { id },
+            relations: DETAIL_RELATIONS,
+            order: DETAIL_ORDER,
+        });
     }
 
     findBySlug(slug: string): Promise<Product | null> {
-        return this.repo.findOne({ where: { slug }, relations: { category: true, brand: true } });
+        return this.repo.findOne({
+            where: { slug },
+            relations: DETAIL_RELATIONS,
+            order: DETAIL_ORDER,
+        });
     }
 
     findByIds(ids: string[]): Promise<Product[]> {
@@ -101,21 +155,11 @@ export class TypeOrmProductsRepository extends ProductsRepository {
         await this.repo.increment({ id }, 'viewCount', 1);
     }
 
-    findLowStock(limit: number): Promise<Product[]> {
-        return this.repo
-            .createQueryBuilder('product')
-            .where('product.stock <= product.lowStockThreshold')
-            .andWhere('product.status != :archived', { archived: ProductStatus.ARCHIVED })
-            .orderBy('product.stock', 'ASC')
-            .take(limit)
-            .getMany();
-    }
-
-    countBySku(sku: string, excludeId?: string): Promise<number> {
-        return this.repo.count({ where: excludeId ? { sku, id: Not(excludeId) } : { sku } });
-    }
-
     countBySlug(slug: string, excludeId?: string): Promise<number> {
         return this.repo.count({ where: excludeId ? { slug, id: Not(excludeId) } : { slug } });
+    }
+
+    refreshAggregates(productId: string): Promise<void> {
+        return refreshProductAggregates(this.repo, productId);
     }
 }

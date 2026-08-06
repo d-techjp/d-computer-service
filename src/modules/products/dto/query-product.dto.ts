@@ -3,9 +3,14 @@ import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
 import { toBoolean } from '../../../common/transformers/transform.helpers';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
-import { ProductStatus } from '../entities/product.entity';
+import { ProductStatus, ProductType } from '../entities/product.entity';
 
 export class QueryProductDto extends PaginationQueryDto {
+    @ApiPropertyOptional({ enum: ProductType })
+    @IsEnum(ProductType)
+    @IsOptional()
+    productType?: ProductType;
+
     @ApiPropertyOptional({ format: 'uuid' })
     @IsUUID()
     @IsOptional()

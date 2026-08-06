@@ -1,4 +1,4 @@
-import type { TransformFnParams } from 'class-transformer';
+import { plainToInstance, type ClassConstructor, type TransformFnParams } from 'class-transformer';
 
 /**
  * Helper cho `@Transform(...)`. class-transformer khai báo `value` là `any`,
@@ -67,6 +67,32 @@ export const toStringArray = ({ value }: TransformFnParams): unknown => {
 
     return [trimmed];
 };
+
+/**
+ * Mảng object lồng nhau (vd `variants`, `options`) gửi qua multipart chỉ có thể
+ * là JSON string — parse về mảng thật để `@ValidateNested` chạy được. JSON body
+ * gửi mảng trực tiếp thì giữ nguyên.
+ */
+const parseJsonArray = (value: unknown): unknown => {
+    const raw: unknown = value;
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    if (typeof raw !== 'string') return raw;
+
+    try {
+        return JSON.parse(raw) as unknown;
+    } catch {
+        return raw; // để @IsArray báo lỗi thay vì nuốt im lặng
+    }
+};
+
+export const toJsonArray = ({ value }: TransformFnParams): unknown => parseJsonArray(value);
+
+export const toJsonArrayOf =
+    <T>(target: ClassConstructor<T>) =>
+    ({ value }: TransformFnParams): unknown => {
+        const raw = parseJsonArray(value);
+        return Array.isArray(raw) ? plainToInstance(target, raw) : raw;
+    };
 
 /** Form-data nhận object dưới dạng JSON string, JSON body thì giữ nguyên. */
 export const toJsonObject = ({ value }: TransformFnParams): unknown => {
