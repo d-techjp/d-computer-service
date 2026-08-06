@@ -18,7 +18,7 @@ import {
 } from 'class-validator';
 import {
     toBoolean,
-    toJsonArray,
+    toJsonArrayOf,
     toJsonObject,
     toStringArray,
     toTrimmed,
@@ -142,7 +142,7 @@ export class CreateProductDto {
             'Ít nhất 1 biến thể. Qua multipart thì gửi dưới dạng chuỗi JSON của mảng. ' +
             'Không phần tử nào đặt `isDefault` thì phần tử đầu tiên được chọn làm mặc định.',
     })
-    @Transform(toJsonArray)
+    @Transform(toJsonArrayOf(CreateVariantDto))
     @IsArray()
     @ArrayMinSize(1, { message: 'Sản phẩm phải có ít nhất 1 biến thể' })
     @ArrayMaxSize(100)
