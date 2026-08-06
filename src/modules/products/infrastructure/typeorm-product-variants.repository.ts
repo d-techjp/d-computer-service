@@ -61,9 +61,11 @@ export class TypeOrmProductVariantsRepository extends ProductVariantsRepository 
         await this.repo.softRemove(variant);
     }
 
-    async clearDefaultFlag(productId: string, exceptVariantId: string): Promise<void> {
+    async clearDefaultFlag(productId: string, exceptVariantId?: string): Promise<void> {
         await this.repo.update(
-            { productId, isDefault: true, id: Not(exceptVariantId) },
+            exceptVariantId
+                ? { productId, isDefault: true, id: Not(exceptVariantId) }
+                : { productId, isDefault: true },
             { isDefault: false },
         );
     }

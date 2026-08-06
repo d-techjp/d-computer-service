@@ -34,3 +34,5 @@ deploy/.env.*
 
 openapi
 postman
+docs
+deploy

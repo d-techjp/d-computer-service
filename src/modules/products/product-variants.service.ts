@@ -11,6 +11,7 @@ import { ProductOptionsRepository } from './domain/product-options.repository';
 import { ProductBundleItemsRepository } from './domain/product-bundle-items.repository';
 import { ProductVariantsRepository } from './domain/product-variants.repository';
 import { ProductsRepository } from './domain/products.repository';
+import type { BulkUpdateVariantItemDto } from './dto/bulk-update-variants.dto';
 import type { CreateVariantDto } from './dto/create-variant.dto';
 import type { GenerateVariantsDto } from './dto/set-product-options.dto';
 import type { UpdateVariantDto } from './dto/update-variant.dto';
@@ -90,6 +91,14 @@ export class ProductVariantsService {
 
         const optionValues = await this.resolveOptionValues(product, dto.optionValueIds);
 
+        // Phải bỏ cờ mặc định ở biến thể khác TRƯỚC khi insert dòng mới mang cờ
+        // `true` — partial unique index `is_default` không deferrable, insert
+        // dòng thứ 2 có cờ true trong khi dòng cũ còn true sẽ tự vi phạm ràng
+        // buộc ngay, dù cùng transaction.
+        if (dto.isDefault === true) {
+            await this.variantsRepository.clearDefaultFlag(productId);
+        }
+
         const variant = await this.variantsRepository.save(
             this.variantsRepository.create({
                 ...dto,
@@ -102,7 +111,6 @@ export class ProductVariantsService {
             }),
         );
 
-        await this.applyDefaultFlag(variant);
         await this.productsRepository.refreshAggregates(productId);
         return this.findOne(variant.id);
     }
@@ -129,6 +137,11 @@ export class ProductVariantsService {
             );
         }
 
+        // Xem lý do "clear trước, save sau" ở `create()`.
+        if (dto.isDefault === true) {
+            await this.variantsRepository.clearDefaultFlag(variant.productId, id);
+        }
+
         const { thumbnail, images } = await this.resolveImages(dto, files, variant.images);
         const { thumbnailFile: _thumbnailFile, imagesFiles: _imagesFiles, ...rest } = dto;
         if (thumbnail !== undefined) rest.thumbnail = thumbnail;
@@ -137,12 +150,68 @@ export class ProductVariantsService {
         Object.assign(variant, rest);
         const saved = await this.variantsRepository.save(variant);
 
-        await this.applyDefaultFlag(saved);
         await this.productsRepository.refreshAggregates(saved.productId);
         // Đổi giá/tồn kho/bật-tắt của một biến thể có thể làm đổi tồn kho combo
         // đang dùng nó làm thành phần.
         await this.bundlesService.refreshBundlesContaining([saved.id]);
         return this.findOne(saved.id);
+    }
+
+    /**
+     * Sửa nhiều biến thể của CÙNG một sản phẩm trong một lần gọi — bảng biến thể
+     * trên UI quản trị (sửa giá/kho/vị trí hàng loạt, kéo-thả sắp xếp qua
+     * `position`). Không nhận file ảnh, xem `VariantImageFiles` ở `update()`.
+     */
+    async bulkUpdate(
+        productId: string,
+        items: BulkUpdateVariantItemDto[],
+    ): Promise<ProductVariant[]> {
+        const product = await this.findProductOrFail(productId);
+        const existing = await this.variantsRepository.findByProductId(productId);
+        const byId = new Map(existing.map((variant) => [variant.id, variant]));
+
+        const targets = this.resolveBulkTargets(productId, items, byId);
+        await this.assertBulkSkusAvailable(targets);
+        this.assertAtMostOneDefault(items);
+
+        // Xem lý do "clear trước, save sau" ở `create()`. Chạy trước vòng lặp vì
+        // sau khi clear, các variant đã LOAD vào bộ nhớ trước đó (trong `existing`/
+        // `targets`) có thể vẫn đang giữ `isDefault: true` lỗi thời — phải đồng bộ
+        // lại thủ công ở dưới, không phải cứ clear ở DB là bộ nhớ tự cập nhật theo.
+        const newDefault = items.find((item) => item.isDefault === true);
+        if (newDefault) {
+            await this.variantsRepository.clearDefaultFlag(productId, newDefault.id);
+        }
+
+        for (const { item, variant } of targets) {
+            this.assertPriceConsistent(
+                item.price ?? variant.price,
+                item.compareAtPrice ?? variant.compareAtPrice,
+            );
+            if (item.bundleInventoryPolicy !== undefined) {
+                this.assertBundlePolicy(product.productType, item.bundleInventoryPolicy);
+            }
+            if (item.stock !== undefined && this.isDerivedBundle(variant)) {
+                throw new BadRequestException(
+                    `Không đặt tồn kho trực tiếp cho combo derived_from_components ("${variant.sku}")`,
+                );
+            }
+
+            const { id: _id, ...rest } = item;
+            Object.assign(variant, rest);
+            if (newDefault && variant.id !== newDefault.id) variant.isDefault = false;
+        }
+
+        const saved = await this.variantsRepository.saveMany(
+            targets.map((target) => target.variant),
+        );
+
+        await this.productsRepository.refreshAggregates(productId);
+        // Đổi giá/tồn kho/bật-tắt của bất kỳ biến thể nào cũng có thể làm đổi
+        // tồn kho combo đang dùng nó làm thành phần.
+        await this.bundlesService.refreshBundlesContaining(saved.map((variant) => variant.id));
+
+        return this.variantsRepository.findByProductId(productId);
     }
 
     /**
@@ -284,12 +353,6 @@ export class ProductVariantsService {
         return product;
     }
 
-    /** Đúng một biến thể mặc định mỗi sản phẩm — partial unique index chỉ đỡ được phần chèn. */
-    private async applyDefaultFlag(variant: ProductVariant): Promise<void> {
-        if (!variant.isDefault) return;
-        await this.variantsRepository.clearDefaultFlag(variant.productId, variant.id);
-    }
-
     private isDerivedBundle(variant: ProductVariant): boolean {
         return variant.bundleInventoryPolicy === BundleInventoryPolicy.DERIVED_FROM_COMPONENTS;
     }
@@ -322,6 +385,55 @@ export class ProductVariantsService {
         if (productType !== ProductType.BUNDLE && policy) {
             throw new BadRequestException(
                 'bundleInventoryPolicy chỉ dùng cho sản phẩm có productType = bundle',
+            );
+        }
+    }
+
+    /** Khớp mỗi item với biến thể hiện có của đúng sản phẩm — id lạ hoặc thuộc sản phẩm khác đều `400`. */
+    private resolveBulkTargets(
+        productId: string,
+        items: BulkUpdateVariantItemDto[],
+        byId: Map<string, ProductVariant>,
+    ): { item: BulkUpdateVariantItemDto; variant: ProductVariant }[] {
+        const ids = items.map((item) => item.id);
+        if (new Set(ids).size !== ids.length) {
+            throw new BadRequestException('Danh sách cập nhật có id biến thể trùng nhau');
+        }
+
+        return items.map((item) => {
+            const variant = byId.get(item.id);
+            if (!variant) {
+                throw new BadRequestException(
+                    `Biến thể ${item.id} không thuộc sản phẩm ${productId}`,
+                );
+            }
+            return { item, variant };
+        });
+    }
+
+    private async assertBulkSkusAvailable(
+        targets: { item: BulkUpdateVariantItemDto; variant: ProductVariant }[],
+    ): Promise<void> {
+        const changedSkus = targets
+            .filter(({ item, variant }) => item.sku !== undefined && item.sku !== variant.sku)
+            .map(({ item }) => item.sku)
+            .filter((sku): sku is string => sku !== undefined);
+
+        if (new Set(changedSkus).size !== changedSkus.length) {
+            throw new BadRequestException('Các SKU mới trong cùng một lần cập nhật bị trùng nhau');
+        }
+
+        for (const { item, variant } of targets) {
+            if (item.sku !== undefined && item.sku !== variant.sku) {
+                await this.assertSkuAvailable(item.sku, item.id);
+            }
+        }
+    }
+
+    private assertAtMostOneDefault(items: BulkUpdateVariantItemDto[]): void {
+        if (items.filter((item) => item.isDefault === true).length > 1) {
+            throw new BadRequestException(
+                'Chỉ được đặt tối đa 1 biến thể mặc định trong một lần cập nhật',
             );
         }
     }

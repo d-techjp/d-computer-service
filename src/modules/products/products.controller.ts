@@ -25,6 +25,7 @@ import { PermissionCode } from '../../common/enums/permission.enum';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
 import { MAX_IMAGES_PER_REQUEST } from '../uploads/constants/upload.constants';
 import { buildImageMulterOptions } from '../uploads/multer-options';
+import { BulkUpdateVariantsDto } from './dto/bulk-update-variants.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { QueryProductDto } from './dto/query-product.dto';
@@ -186,6 +187,24 @@ export class ProductsController {
         @Body() dto: CreateVariantDto,
     ): Promise<ProductVariant> {
         return this.variantsService.create(id, dto);
+    }
+
+    @ApiBearerAuth()
+    @Patch(':id/variants')
+    @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
+    @LogActivity({ action: ActivityAction.UPDATE, resource: 'product_variant' })
+    @ApiOperation({
+        summary: 'Sửa hàng loạt biến thể của cùng một sản phẩm',
+        description:
+            'Mỗi phần tử `variants[]` cần `id` + các field muốn đổi (giá, kho, `position`…). ' +
+            'Không nhận file ảnh — ảnh riêng của từng biến thể vẫn qua PATCH /variants/:id. ' +
+            'Trả về TOÀN BỘ biến thể của sản phẩm sau khi sửa.',
+    })
+    bulkUpdateVariants(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: BulkUpdateVariantsDto,
+    ): Promise<ProductVariant[]> {
+        return this.variantsService.bulkUpdate(id, dto.variants);
     }
 
     @ApiBearerAuth()

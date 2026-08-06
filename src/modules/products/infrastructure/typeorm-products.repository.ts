@@ -26,6 +26,23 @@ const DETAIL_RELATIONS = {
     options: { values: true },
 } as const;
 
+const DETAIL_ORDER = {
+    variants: {
+        position: 'ASC',
+        createdAt: 'ASC',
+        optionValues: {
+            position: 'ASC',
+            createdAt: 'ASC',
+            option: { position: 'ASC', createdAt: 'ASC' },
+        },
+    },
+    options: {
+        position: 'ASC',
+        createdAt: 'ASC',
+        values: { position: 'ASC', createdAt: 'ASC' },
+    },
+} as const;
+
 @Injectable()
 export class TypeOrmProductsRepository extends ProductsRepository {
     constructor(@InjectRepository(Product) private readonly repo: Repository<Product>) {
@@ -110,11 +127,19 @@ export class TypeOrmProductsRepository extends ProductsRepository {
     }
 
     findById(id: string): Promise<Product | null> {
-        return this.repo.findOne({ where: { id }, relations: DETAIL_RELATIONS });
+        return this.repo.findOne({
+            where: { id },
+            relations: DETAIL_RELATIONS,
+            order: DETAIL_ORDER,
+        });
     }
 
     findBySlug(slug: string): Promise<Product | null> {
-        return this.repo.findOne({ where: { slug }, relations: DETAIL_RELATIONS });
+        return this.repo.findOne({
+            where: { slug },
+            relations: DETAIL_RELATIONS,
+            order: DETAIL_ORDER,
+        });
     }
 
     findByIds(ids: string[]): Promise<Product[]> {

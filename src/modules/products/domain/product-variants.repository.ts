@@ -22,8 +22,16 @@ export abstract class ProductVariantsRepository {
 
     abstract softRemove(variant: ProductVariant): Promise<void>;
 
-    /** Bỏ cờ mặc định ở mọi biến thể khác — giữ đúng 1 biến thể mặc định / sản phẩm. */
-    abstract clearDefaultFlag(productId: string, exceptVariantId: string): Promise<void>;
+    /**
+     * Bỏ cờ mặc định ở mọi biến thể khác — giữ đúng 1 biến thể mặc định / sản phẩm.
+     * Bỏ trống `exceptVariantId` để xoá cờ ở TẤT CẢ biến thể (dùng khi biến thể
+     * mới còn chưa có id, ví dụ lúc tạo).
+     *
+     * Phải gọi TRƯỚC khi lưu biến thể sẽ mang cờ `true` — partial unique index
+     * `is_default` không deferrable, nên nếu lưu trước rồi mới clear, câu lưu đó
+     * tự vi phạm ràng buộc ngay khi có 2 dòng cùng `true`, dù chỉ thoáng qua.
+     */
+    abstract clearDefaultFlag(productId: string, exceptVariantId?: string): Promise<void>;
 
     /**
      * Biến thể dưới ngưỡng cảnh báo. Bỏ qua biến thể không theo dõi kho và
