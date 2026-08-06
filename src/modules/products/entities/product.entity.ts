@@ -144,6 +144,20 @@ export class Product extends SoftDeletableEntity {
     @OneToMany(() => ProductOption, (option) => option.product)
     options: ProductOption[];
 
+    /**
+     * Không phải cột DB — `ProductsService` tự gộp `thumbnail`/`images` của
+     * master với `thumbnail`/`images` của TỪNG biến thể, khử trùng, chỉ tính khi
+     * trả về chi tiết (nơi `variants` được nạp đủ). Response danh sách không có
+     * field này vì `variants` ở đó chỉ chứa biến thể mặc định — gộp sẽ thiếu.
+     */
+    @ApiPropertyOptional({
+        type: [String],
+        description:
+            'CHỈ có ở response chi tiết (GET /products/:id, /products/slug/:slug). ' +
+            'Gộp ảnh master + ảnh mọi biến thể, đã khử trùng.',
+    })
+    galleryImages?: string[];
+
     get inStock(): boolean {
         return this.totalStock > 0;
     }

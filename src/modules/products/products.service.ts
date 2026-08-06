@@ -80,7 +80,7 @@ export class ProductsService {
     async findOne(id: string): Promise<Product> {
         const product = await this.productsRepository.findById(id);
         if (!product) throw new NotFoundException(`Không tìm thấy sản phẩm với id ${id}`);
-        return product;
+        return this.withGalleryImages(product);
     }
 
     async findBySlug(slug: string): Promise<Product> {
@@ -89,7 +89,7 @@ export class ProductsService {
 
         // Đếm lượt xem không chặn response và không đụng tới updatedAt
         await this.productsRepository.incrementViewCount(product.id);
-        return product;
+        return this.withGalleryImages(product);
     }
 
     findByIds(ids: string[]): Promise<Product[]> {
@@ -133,6 +133,28 @@ export class ProductsService {
         await this.findOne(productId);
         const description = await this.productDescriptionsRepository.upsert(productId, content);
         return { productId, content: description.content };
+    }
+
+    /**
+     * Gộp `thumbnail`/`images` của master với `thumbnail`/`images` của TỪNG biến
+     * thể thành một mảng phẳng, khử trùng, giữ thứ tự xuất hiện đầu tiên. Chỉ gọi
+     * ở `findOne`/`findBySlug` — nơi `variants` luôn được nạp đủ (DETAIL_RELATIONS).
+     */
+    private withGalleryImages(product: Product): Product {
+        const gallery = new Set<string>();
+        const add = (url: string | null | undefined): void => {
+            if (url) gallery.add(url);
+        };
+
+        add(product.thumbnail);
+        (product.images ?? []).forEach(add);
+        for (const variant of product.variants ?? []) {
+            add(variant.thumbnail);
+            (variant.images ?? []).forEach(add);
+        }
+
+        product.galleryImages = [...gallery];
+        return product;
     }
 
     private async assertRelationsExist(
