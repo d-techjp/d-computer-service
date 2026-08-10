@@ -5,6 +5,7 @@ import { CategoriesModule } from '../categories/categories.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { AdminCostPriceService } from './admin/admin-cost-price.service';
 import { AdminProductsController } from './admin/admin-products.controller';
+import { AdminVariantCountService } from './admin/admin-variant-count.service';
 import { AdminVariantsController } from './admin/admin-variants.controller';
 import { ProductBundlesService } from './application/product-bundles.service';
 import { ProductOptionsService } from './application/product-options.service';
@@ -59,6 +60,7 @@ import { TypeOrmProductsRepository } from './infrastructure/typeorm-products.rep
         ClientProductsService,
         ClientVariantsService,
         AdminCostPriceService,
+        AdminVariantCountService,
         { provide: ProductsRepository, useClass: TypeOrmProductsRepository },
         { provide: ProductVariantsRepository, useClass: TypeOrmProductVariantsRepository },
         { provide: ProductOptionsRepository, useClass: TypeOrmProductOptionsRepository },

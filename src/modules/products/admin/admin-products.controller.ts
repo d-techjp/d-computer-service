@@ -39,6 +39,7 @@ import { ProductOption } from '../entities/product-option.entity';
 import { ProductVariant } from '../entities/product-variant.entity';
 import { Product } from '../entities/product.entity';
 import { AdminCostPriceService } from './admin-cost-price.service';
+import { AdminVariantCountService } from './admin-variant-count.service';
 
 /** Multer field cho `thumbnailFile`/`imagesFiles` + khai multipart cho Swagger — dùng chung create/update. */
 const UploadProductImages = (): MethodDecorator =>
@@ -65,17 +66,20 @@ export class AdminProductsController {
         private readonly variantsService: ProductVariantsService,
         private readonly optionsService: ProductOptionsService,
         private readonly costPriceService: AdminCostPriceService,
+        private readonly variantCountService: AdminVariantCountService,
     ) {}
 
     @Get()
     @ApiOperation({
         summary: 'Danh sách sản phẩm mọi trạng thái: tìm kiếm, lọc, phân trang',
         description:
-            'Khác bản storefront ở hai điểm: lọc được `status` (kể cả draft/archived) ' +
-            'và biến thể trả kèm `costPrice`.',
+            'Khác bản storefront ở ba điểm: lọc được `status` (kể cả draft/archived), ' +
+            'biến thể trả kèm `costPrice`, và mỗi sản phẩm có thêm `variantCount`.',
     })
     async findAll(@Query() query: QueryProductDto): Promise<PaginatedResult<Product>> {
-        return this.costPriceService.attachToPage(await this.productsService.findAll(query));
+        const page = await this.productsService.findAll(query);
+        await this.variantCountService.attachToPage(page);
+        return this.costPriceService.attachToPage(page);
     }
 
     @Get(':id')

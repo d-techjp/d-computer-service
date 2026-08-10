@@ -66,6 +66,20 @@ export class TypeOrmProductVariantsRepository extends ProductVariantsRepository 
         return this.repo.count({ where: { productId } });
     }
 
+    async countByProductIds(productIds: string[]): Promise<Map<string, number>> {
+        if (productIds.length === 0) return new Map();
+
+        const rows = await this.repo
+            .createQueryBuilder('variant')
+            .select('variant.productId', 'productId')
+            .addSelect('COUNT(*)', 'count')
+            .where('variant.productId IN (:...productIds)', { productIds })
+            .groupBy('variant.productId')
+            .getRawMany<{ productId: string; count: string }>();
+
+        return new Map(rows.map((row) => [row.productId, Number(row.count)]));
+    }
+
     countBySku(sku: string, excludeId?: string): Promise<number> {
         return this.repo.count({ where: excludeId ? { sku, id: Not(excludeId) } : { sku } });
     }

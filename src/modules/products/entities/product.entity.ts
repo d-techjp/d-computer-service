@@ -178,6 +178,17 @@ export class Product extends SoftDeletableEntity {
     })
     galleryImages?: string[];
 
+    /**
+     * Không phải cột DB — chỉ được gắn ở `GET /admin/products` (danh sách phân
+     * trang) trong `AdminVariantCountService`. Đếm biến thể chưa xoá, kể cả
+     * đang tắt — cùng tập hợp mà `GET /admin/products/:id/variants` trả về.
+     */
+    @ApiPropertyOptional({
+        default: 0,
+        description: 'Số biến thể chưa xoá của sản phẩm — CHỈ có ở GET /admin/products (danh sách)',
+    })
+    variantCount?: number;
+
     get inStock(): boolean {
         return this.totalStock > 0;
     }
