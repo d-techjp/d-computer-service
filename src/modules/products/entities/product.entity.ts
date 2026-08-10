@@ -24,6 +24,25 @@ export enum ProductType {
 }
 
 /**
+ * Một dòng thông số kỹ thuật, lưu trong `Product.specifications` dưới dạng mảng
+ * JSONB. Trước đây là `Record<string, string>` — object key trong JSONB của
+ * Postgres KHÔNG đảm bảo giữ thứ tự chèn (đây là hành vi được tài liệu hoá,
+ * không phải bug), nên thứ tự hiển thị có thể bị xáo khi đọc lại. Mảng thì
+ * Postgres giữ nguyên thứ tự phần tử, và `position` tường minh để FE sắp xếp
+ * mà không phải dựa vào thứ tự mảng (dù server luôn đồng bộ hai thứ khớp nhau).
+ */
+export class ProductSpecification {
+    @ApiProperty({ example: 'CPU' })
+    name: string;
+
+    @ApiProperty({ example: 'Intel Core i5-1235U' })
+    value: string;
+
+    @ApiProperty({ default: 0, description: 'Thứ tự hiển thị, 0-based' })
+    position: number;
+}
+
+/**
  * Product master — KHÔNG bán trực tiếp. Chỉ giữ thông tin dùng chung cho mọi
  * biến thể: tên, slug, taxonomy, ảnh/thông số chung, số liệu tổng hợp.
  *
@@ -66,12 +85,13 @@ export class Product extends SoftDeletableEntity {
     images: string[] | null;
 
     @ApiPropertyOptional({
+        type: () => [ProductSpecification],
         description:
-            'Thông số DÙNG CHUNG mọi biến thể, ví dụ { "CPU": "i5-1235U" }. ' +
+            'Thông số DÙNG CHUNG mọi biến thể, sắp theo `position`. ' +
             'Thông số khác nhau giữa các biến thể thì khai bằng ProductOption.',
     })
     @Column({ type: 'jsonb', nullable: true })
-    specifications: Record<string, string> | null;
+    specifications: ProductSpecification[] | null;
 
     @ApiProperty({ default: false })
     @Column({ type: 'boolean', default: false })

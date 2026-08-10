@@ -6,7 +6,6 @@ import {
     IsArray,
     IsBoolean,
     IsEnum,
-    IsObject,
     IsOptional,
     IsString,
     IsUUID,
@@ -19,7 +18,6 @@ import {
 import {
     toBoolean,
     toJsonArrayOf,
-    toJsonObject,
     toStringArray,
     toTrimmed,
 } from '../../../common/transformers/transform.helpers';
@@ -27,6 +25,7 @@ import { SLUG_MESSAGE, SLUG_RULE } from '../../categories/dto/create-category.dt
 import { MAX_IMAGES_PER_REQUEST } from '../../uploads/constants/upload.constants';
 import { ProductStatus, ProductType } from '../entities/product.entity';
 import { CreateVariantDto } from './create-variant.dto';
+import { ProductSpecificationDto } from './product-specification.dto';
 
 /**
  * Tạo product master KÈM ít nhất một biến thể. Không cho tạo product "rỗng":
@@ -107,13 +106,22 @@ export class CreateProductDto {
     imagesFiles?: unknown;
 
     @ApiPropertyOptional({
-        example: { CPU: 'Intel Core i5-1235U' },
-        description: 'Thông số DÙNG CHUNG mọi biến thể. Thông số khác nhau thì khai bằng option.',
+        type: [ProductSpecificationDto],
+        example: [
+            { name: 'CPU', value: 'Intel Core i5-1235U', position: 0 },
+            { name: 'RAM', value: '16GB', position: 1 },
+        ],
+        description:
+            'Thông số DÙNG CHUNG mọi biến thể, hiển thị theo `position`. Thông số khác nhau ' +
+            'thì khai bằng option. Qua multipart thì gửi dưới dạng chuỗi JSON của mảng.',
     })
-    @Transform(toJsonObject)
-    @IsObject()
+    @Transform(toJsonArrayOf(ProductSpecificationDto))
+    @IsArray()
+    @ArrayMaxSize(50)
+    @ValidateNested({ each: true })
+    @Type(() => ProductSpecificationDto)
     @IsOptional()
-    specifications?: Record<string, string>;
+    specifications?: ProductSpecificationDto[];
 
     @ApiPropertyOptional({ enum: ProductStatus, default: ProductStatus.DRAFT })
     @IsEnum(ProductStatus)
