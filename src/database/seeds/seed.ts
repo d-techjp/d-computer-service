@@ -17,6 +17,7 @@ import {
 } from '../../modules/products/entities/product-variant.entity';
 import {
     Product,
+    ProductSpecification,
     ProductStatus,
     ProductType,
 } from '../../modules/products/entities/product.entity';
@@ -177,6 +178,23 @@ async function seedBrands(ds: DataSource): Promise<Map<string, Brand>> {
     return result;
 }
 
+/**
+ * Dữ liệu mẫu khai `specifications` bằng object cho dễ đọc (`{ CPU: '...' }`) —
+ * hàm này chuyển sang mảng có `position` đúng format cột `Product.specifications`
+ * thật. Thứ tự phần tử theo thứ tự khai báo key trong object literal, JS giữ
+ * nguyên thứ tự đó nên không cần sắp lại.
+ */
+function toSpecificationsArray(
+    specifications: Record<string, string> | undefined,
+): ProductSpecification[] | null {
+    if (!specifications) return null;
+    return Object.entries(specifications).map(([name, value], position) => ({
+        name,
+        value,
+        position,
+    }));
+}
+
 async function seedProducts(
     ds: DataSource,
     categories: Map<string, Category>,
@@ -288,7 +306,7 @@ async function seedProducts(
                 name: item.name,
                 slug,
                 productType: item.productType ?? ProductType.STANDARD,
-                specifications: item.specifications ?? null,
+                specifications: toSpecificationsArray(item.specifications),
                 status: ProductStatus.ACTIVE,
                 isFeatured: item.variants.length > 1,
                 categoryId: categories.get(item.category)?.id ?? null,

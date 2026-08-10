@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import { resolveSortColumn } from '../../../common/utils/query.util';
+import { Product } from '../../products/entities/product.entity';
 import { CategoriesRepository } from '../domain/categories.repository';
 import type { QueryCategoryDto } from '../dto/query-category.dto';
 import { Category } from '../entities/category.entity';
@@ -49,7 +50,33 @@ export class TypeOrmCategoriesRepository extends CategoriesRepository {
             .take(criteria.limit);
 
         const [items, total] = await qb.getManyAndCount();
+        await this.attachProductCounts(items);
         return { items, total };
+    }
+
+    /**
+     * Gắn `productCount` cho một trang category bằng đúng MỘT truy vấn GROUP BY,
+     * thay vì đếm riêng cho từng category (n+1). Category không có sản phẩm nào
+     * thì không xuất hiện trong kết quả GROUP BY — set mặc định 0 trước cho toàn
+     * bộ rồi mới ghi đè bằng số đếm thật.
+     */
+    private async attachProductCounts(categories: Category[]): Promise<void> {
+        if (categories.length === 0) return;
+        for (const category of categories) category.productCount = 0;
+
+        const categoryIds = categories.map((category) => category.id);
+        const rows = await this.repo.manager
+            .createQueryBuilder(Product, 'product')
+            .select('product.categoryId', 'categoryId')
+            .addSelect('COUNT(*)', 'count')
+            .where('product.categoryId IN (:...categoryIds)', { categoryIds })
+            .groupBy('product.categoryId')
+            .getRawMany<{ categoryId: string; count: string }>();
+
+        const countByCategoryId = new Map(rows.map((row) => [row.categoryId, Number(row.count)]));
+        for (const category of categories) {
+            category.productCount = countByCategoryId.get(category.id) ?? 0;
+        }
     }
 
     findAllForTree(onlyActive: boolean): Promise<Category[]> {

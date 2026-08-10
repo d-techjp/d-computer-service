@@ -8,9 +8,15 @@ import { UploadsService } from '../../uploads/uploads.service';
 import { ProductDescriptionsRepository } from '../domain/product-descriptions.repository';
 import { ProductsRepository } from '../domain/products.repository';
 import type { CreateProductDto } from '../dto/create-product.dto';
+import type { ProductSpecificationDto } from '../dto/product-specification.dto';
 import type { QueryProductDto } from '../dto/query-product.dto';
 import type { UpdateProductDto } from '../dto/update-product.dto';
-import { Product, ProductStatus, ProductType } from '../entities/product.entity';
+import {
+    Product,
+    ProductSpecification,
+    ProductStatus,
+    ProductType,
+} from '../entities/product.entity';
 import { ProductVariantsService } from './product-variants.service';
 
 export interface ProductImageFiles {
@@ -57,6 +63,7 @@ export class ProductsService {
                 productType,
                 thumbnail,
                 images,
+                specifications: this.resolveSpecifications(dto.specifications),
                 slug: await this.resolveSlug(dto.slug ?? dto.name),
                 variants, // cascade: ['insert'] — master + biến thể lưu cùng một lần
             }),
@@ -123,6 +130,10 @@ export class ProductsService {
         const { slug: _slug, ...rest } = dto;
         if (thumbnail !== undefined) rest.thumbnail = thumbnail;
         if (images !== undefined) rest.images = images;
+        // undefined -> không gửi field này -> giữ nguyên thông số cũ (cùng quy ước với images)
+        if (rest.specifications !== undefined) {
+            rest.specifications = this.resolveSpecifications(rest.specifications);
+        }
 
         Object.assign(product, rest);
         await this.productsRepository.save(product);
@@ -189,6 +200,25 @@ export class ProductsService {
     ): Promise<void> {
         if (categoryId) await this.categoriesService.findOne(categoryId);
         if (brandId) await this.brandsService.findOne(brandId);
+    }
+
+    /**
+     * `position` để trống thì lấy theo thứ tự xuất hiện trong mảng gửi lên; luôn
+     * ghi lại tuần tự 0..n-1 sau khi sắp xếp để field `position` và thứ tự phần
+     * tử trong mảng JSONB không bao giờ lệch nhau khi đọc lại.
+     *
+     * `undefined` được giữ nguyên `undefined` (không map thành `[]`) để khớp quy
+     * ước "không gửi field -> không đụng tới dữ liệu cũ" đang dùng cho images.
+     */
+    private resolveSpecifications(
+        specifications: ProductSpecificationDto[] | undefined,
+    ): ProductSpecification[] | undefined {
+        if (!specifications) return undefined;
+
+        return specifications
+            .map((spec, index) => ({ ...spec, position: spec.position ?? index }))
+            .sort((a, b) => a.position - b.position)
+            .map((spec, index) => ({ ...spec, position: index }));
     }
 
     private async resolveSlug(source: string, excludeId?: string): Promise<string> {

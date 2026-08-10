@@ -29,6 +29,8 @@ export abstract class ProductVariantsRepository {
 
     abstract countByProductId(productId: string): Promise<number>;
 
+    abstract countByProductIds(productIds: string[]): Promise<Map<string, number>>;
+
     abstract countBySku(sku: string, excludeId?: string): Promise<number>;
 
     abstract softRemove(variant: ProductVariant): Promise<void>;
