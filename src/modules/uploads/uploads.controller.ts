@@ -1,14 +1,8 @@
-import {
-    Controller,
-    Post,
-    Query,
-    UploadedFile,
-    UploadedFiles,
-    UseInterceptors,
-} from '@nestjs/common';
+import { Post, Query, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiOperation } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
+import { AdminController } from '../../common/decorators/admin-controller.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PermissionCode } from '../../common/enums/permission.enum';
 import { ActivityAction } from '../activity-logs/enums/activity-action.enum';
@@ -18,9 +12,7 @@ import { UploadImageResponseDto } from './dto/upload-image-response.dto';
 import { buildImageMulterOptions } from './multer-options';
 import { UploadsService } from './uploads.service';
 
-@ApiTags('Uploads')
-@ApiBearerAuth()
-@Controller('uploads')
+@AdminController('uploads', 'Uploads')
 export class UploadsController {
     constructor(private readonly uploadsService: UploadsService) {}
 

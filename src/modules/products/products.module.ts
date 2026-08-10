@@ -3,6 +3,17 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BrandsModule } from '../brands/brands.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { AdminCostPriceService } from './admin/admin-cost-price.service';
+import { AdminProductsController } from './admin/admin-products.controller';
+import { AdminVariantsController } from './admin/admin-variants.controller';
+import { ProductBundlesService } from './application/product-bundles.service';
+import { ProductOptionsService } from './application/product-options.service';
+import { ProductVariantsService } from './application/product-variants.service';
+import { ProductsService } from './application/products.service';
+import { ClientProductsController } from './client/client-products.controller';
+import { ClientProductsService } from './client/client-products.service';
+import { ClientVariantsController } from './client/client-variants.controller';
+import { ClientVariantsService } from './client/client-variants.service';
 import { ProductBundleItemsRepository } from './domain/product-bundle-items.repository';
 import { ProductDescriptionsRepository } from './domain/product-descriptions.repository';
 import { ProductOptionsRepository } from './domain/product-options.repository';
@@ -19,12 +30,6 @@ import { TypeOrmProductDescriptionsRepository } from './infrastructure/typeorm-p
 import { TypeOrmProductOptionsRepository } from './infrastructure/typeorm-product-options.repository';
 import { TypeOrmProductVariantsRepository } from './infrastructure/typeorm-product-variants.repository';
 import { TypeOrmProductsRepository } from './infrastructure/typeorm-products.repository';
-import { ProductBundlesService } from './product-bundles.service';
-import { ProductOptionsService } from './product-options.service';
-import { ProductVariantsController } from './product-variants.controller';
-import { ProductVariantsService } from './product-variants.service';
-import { ProductsController } from './products.controller';
-import { ProductsService } from './products.service';
 
 @Module({
     imports: [
@@ -40,12 +45,20 @@ import { ProductsService } from './products.service';
         BrandsModule,
         UploadsModule,
     ],
-    controllers: [ProductsController, ProductVariantsController],
+    controllers: [
+        ClientProductsController,
+        ClientVariantsController,
+        AdminProductsController,
+        AdminVariantsController,
+    ],
     providers: [
         ProductsService,
         ProductVariantsService,
         ProductOptionsService,
         ProductBundlesService,
+        ClientProductsService,
+        ClientVariantsService,
+        AdminCostPriceService,
         { provide: ProductsRepository, useClass: TypeOrmProductsRepository },
         { provide: ProductVariantsRepository, useClass: TypeOrmProductVariantsRepository },
         { provide: ProductOptionsRepository, useClass: TypeOrmProductOptionsRepository },
@@ -55,6 +68,7 @@ import { ProductsService } from './products.service';
             useClass: TypeOrmProductDescriptionsRepository,
         },
     ],
+    // Chỉ export service lõi — module khác dùng nghiệp vụ chung, không dùng bản siết cho storefront
     exports: [ProductsService, ProductVariantsService, ProductBundlesService],
 })
 export class ProductsModule {}

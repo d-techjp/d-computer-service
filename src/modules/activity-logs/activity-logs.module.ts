@@ -1,7 +1,8 @@
 import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ActivityLogsController } from './activity-logs.controller';
 import { ActivityLogsService } from './activity-logs.service';
+import { AdminActivityLogsController } from './admin/admin-activity-logs.controller';
+import { ClientActivityLogsController } from './client/client-activity-logs.controller';
 import { ActivityLogsRepository } from './domain/activity-logs.repository';
 import { ActivityLog } from './entities/activity-log.entity';
 import { TypeOrmActivityLogsRepository } from './infrastructure/typeorm-activity-logs.repository';
@@ -13,7 +14,7 @@ import { TypeOrmActivityLogsRepository } from './infrastructure/typeorm-activity
 @Global()
 @Module({
     imports: [TypeOrmModule.forFeature([ActivityLog])],
-    controllers: [ActivityLogsController],
+    controllers: [ClientActivityLogsController, AdminActivityLogsController],
     providers: [
         ActivityLogsService,
         { provide: ActivityLogsRepository, useClass: TypeOrmActivityLogsRepository },

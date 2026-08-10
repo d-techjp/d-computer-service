@@ -6,7 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { config as loadEnv } from 'dotenv';
 import * as YAML from 'js-yaml';
 import { AppModule } from '../src/app.module';
-import { createOpenApiDocument } from '../src/swagger.config';
+import { createOpenApiDocument, pickAudience } from '../src/swagger.config';
 
 loadEnv();
 
@@ -35,13 +35,21 @@ async function main(): Promise<void> {
     const outDir = join(__dirname, '..', 'openapi');
     mkdirSync(outDir, { recursive: true });
 
+    // openapi.json giữ nguyên bản đầy đủ — `generate-postman.ts` đọc file này để
+    // dựng một collection duy nhất. Hai file tách thêm là để chia cho từng team FE.
     writeFileSync(join(outDir, 'openapi.json'), JSON.stringify(document, null, 2));
     writeFileSync(join(outDir, 'openapi.yaml'), YAML.dump(document));
+
+    for (const audience of ['client', 'admin'] as const) {
+        const scoped = pickAudience(document, audience);
+        writeFileSync(join(outDir, `openapi.${audience}.json`), JSON.stringify(scoped, null, 2));
+        writeFileSync(join(outDir, `openapi.${audience}.yaml`), YAML.dump(scoped));
+    }
 
     await app.close();
 
     const logger = new Logger('ExportOpenApi');
-    logger.log(`Đã ghi openapi/openapi.json và openapi/openapi.yaml`);
+    logger.log('Đã ghi openapi/openapi.{json,yaml} và bản tách openapi.{client,admin}.{json,yaml}');
 }
 
 main().catch((error: unknown) => {

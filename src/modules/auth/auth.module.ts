@@ -5,8 +5,9 @@ import { PassportModule } from '@nestjs/passport';
 import type { JwtExpiresIn } from '../../common/interfaces/authenticated-user.interface';
 import { RbacModule } from '../rbac/rbac.module';
 import { UsersModule } from '../users/users.module';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
+import { AdminAuthController } from './admin/admin-auth.controller';
+import { AuthService } from './application/auth.service';
+import { ClientAuthController } from './client/client-auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TokenVersionModule } from './token-version/token-version.module';
 
@@ -28,7 +29,7 @@ import { TokenVersionModule } from './token-version/token-version.module';
             }),
         }),
     ],
-    controllers: [AuthController],
+    controllers: [ClientAuthController, AdminAuthController],
     providers: [AuthService, JwtStrategy],
     exports: [AuthService, TokenVersionModule],
 })

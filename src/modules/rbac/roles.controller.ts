@@ -1,6 +1,5 @@
 import {
     Body,
-    Controller,
     Delete,
     Get,
     HttpCode,
@@ -12,8 +11,9 @@ import {
     Put,
     Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { LogActivity } from '../../common/decorators/activity-log.decorator';
+import { AdminController } from '../../common/decorators/admin-controller.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../common/dto/paginated-result.dto';
 import { PermissionCode } from '../../common/enums/permission.enum';
@@ -26,9 +26,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { Role } from './entities/role.entity';
 import { RolesService } from './roles.service';
 
-@ApiTags('RBAC - Roles')
-@ApiBearerAuth()
-@Controller('roles')
+@AdminController('roles', 'RBAC - Roles')
 @RequirePermissions(PermissionCode.USER_ROLE_MANAGE)
 export class RolesController {
     constructor(private readonly rolesService: RolesService) {}
