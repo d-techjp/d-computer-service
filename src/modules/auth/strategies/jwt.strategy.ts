@@ -6,7 +6,7 @@ import type {
     AuthenticatedUser,
     JwtPayload,
 } from '../../../common/interfaces/authenticated-user.interface';
-import { AuthService } from '../auth.service';
+import { AuthService } from '../application/auth.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {

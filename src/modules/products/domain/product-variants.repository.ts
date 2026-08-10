@@ -12,6 +12,17 @@ export abstract class ProductVariantsRepository {
 
     abstract findByIds(ids: string[]): Promise<ProductVariant[]>;
 
+    /**
+     * Giá vốn của từng biến thể, trả riêng thành map `variantId -> costPrice`.
+     *
+     * `ProductVariant.costPrice` khai `select: false` nên KHÔNG bao giờ đi kèm
+     * trong các truy vấn thường — đó là hàng rào giữ giá vốn khỏi lọt ra API
+     * storefront. Muốn đọc thì phải hỏi thẳng qua đây, và chỉ tầng quản trị mới
+     * được gọi. Đừng gỡ `select: false` để tiện hơn: làm vậy là mọi endpoint
+     * public tự động lộ giá vốn.
+     */
+    abstract findCostPrices(variantIds: string[]): Promise<Map<string, number | null>>;
+
     abstract findByProductId(productId: string): Promise<ProductVariant[]>;
 
     abstract findDefaultByProductId(productId: string): Promise<ProductVariant | null>;

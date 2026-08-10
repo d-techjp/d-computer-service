@@ -6,7 +6,7 @@ import { SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { createOpenApiDocument } from './swagger.config';
+import { createOpenApiDocument, pickAudience } from './swagger.config';
 
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -45,16 +45,28 @@ async function bootstrap(): Promise<void> {
 
     app.enableShutdownHooks();
 
+    // Hai tài liệu tách biệt để FE storefront và FE quản trị không phải đọc lẫn API của nhau
     const document = createOpenApiDocument(app);
-    SwaggerModule.setup(`${apiPrefix}/docs`, app, document, {
-        swaggerOptions: { persistAuthorization: true },
-    });
+    const swaggerOptions = { swaggerOptions: { persistAuthorization: true } };
+    SwaggerModule.setup(
+        `${apiPrefix}/docs/client`,
+        app,
+        pickAudience(document, 'client'),
+        swaggerOptions,
+    );
+    SwaggerModule.setup(
+        `${apiPrefix}/docs/admin`,
+        app,
+        pickAudience(document, 'admin'),
+        swaggerOptions,
+    );
 
     await app.listen(port);
 
     const logger = new Logger('Bootstrap');
     logger.log(`Server chạy tại http://localhost:${port}/${apiPrefix}/${apiVersion}`);
-    logger.log(`Swagger: http://localhost:${port}/${apiPrefix}/docs`);
+    logger.log(`Swagger client: http://localhost:${port}/${apiPrefix}/docs/client`);
+    logger.log(`Swagger admin:  http://localhost:${port}/${apiPrefix}/docs/admin`);
 }
 
 void bootstrap();

@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Not, Repository } from 'typeorm';
+import { In, Not, Repository, SelectQueryBuilder } from 'typeorm';
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import { resolveSortColumn } from '../../../common/utils/query.util';
+import type { ProductSearchOptions } from '../domain/products.repository';
 import { ProductsRepository } from '../domain/products.repository';
 import type { QueryProductDto } from '../dto/query-product.dto';
-import { Product } from '../entities/product.entity';
+import { Product, ProductStatus } from '../entities/product.entity';
 import { refreshProductAggregates } from './product-aggregates';
 
 const SORTABLE_COLUMNS = [
@@ -59,8 +60,25 @@ export class TypeOrmProductsRepository extends ProductsRepository {
 
     async search(
         criteria: QueryProductDto,
-        categoryIds?: string[],
+        options?: ProductSearchOptions,
     ): Promise<RepositoryPage<Product>> {
+        const qb = this.buildSearchQuery(criteria, options);
+
+        const sortBy = resolveSortColumn(criteria.sortBy, SORTABLE_COLUMNS, 'createdAt');
+        // skip/take (không phải offset/limit) để phân trang theo sản phẩm,
+        // không bị lệch vì join bảng variants quan hệ 1-n
+        qb.orderBy(`product.${sortBy}`, criteria.sortOrder)
+            .skip(criteria.skip)
+            .take(criteria.limit);
+
+        const [items, total] = await qb.getManyAndCount();
+        return { items, total };
+    }
+
+    private buildSearchQuery(
+        criteria: QueryProductDto,
+        options?: ProductSearchOptions,
+    ): SelectQueryBuilder<Product> {
         const qb = this.repo
             .createQueryBuilder('product')
             .leftJoin('product.category', 'category')
@@ -86,10 +104,20 @@ export class TypeOrmProductsRepository extends ProductsRepository {
             );
         }
 
-        if (categoryIds) {
-            qb.andWhere('product.categoryId IN (:...categoryIds)', { categoryIds });
+        if (options?.categoryIds) {
+            qb.andWhere('product.categoryId IN (:...categoryIds)', {
+                categoryIds: options.categoryIds,
+            });
         } else if (criteria.categoryId) {
             qb.andWhere('product.categoryId = :categoryId', { categoryId: criteria.categoryId });
+        }
+
+        // Rào trạng thái do phía gọi áp đặt — cộng dồn (AND) với `criteria.status`
+        // của người dùng, nên client không thể nới rộng phạm vi bằng query param.
+        if (options?.statuses?.length) {
+            qb.andWhere('product.status IN (:...visibleStatuses)', {
+                visibleStatuses: options.statuses,
+            });
         }
 
         if (criteria.brandId)
@@ -115,31 +143,27 @@ export class TypeOrmProductsRepository extends ProductsRepository {
             qb.andWhere('product.isFeatured = :isFeatured', { isFeatured: criteria.isFeatured });
         }
 
-        const sortBy = resolveSortColumn(criteria.sortBy, SORTABLE_COLUMNS, 'createdAt');
-        // skip/take (không phải offset/limit) để phân trang theo sản phẩm,
-        // không bị lệch vì join bảng variants quan hệ 1-n
-        qb.orderBy(`product.${sortBy}`, criteria.sortOrder)
-            .skip(criteria.skip)
-            .take(criteria.limit);
-
-        const [items, total] = await qb.getManyAndCount();
-        return { items, total };
+        return qb;
     }
 
-    findById(id: string): Promise<Product | null> {
+    findById(id: string, statuses?: ProductStatus[]): Promise<Product | null> {
         return this.repo.findOne({
-            where: { id },
+            where: statuses?.length ? { id, status: In(statuses) } : { id },
             relations: DETAIL_RELATIONS,
             order: DETAIL_ORDER,
         });
     }
 
-    findBySlug(slug: string): Promise<Product | null> {
+    findBySlug(slug: string, statuses?: ProductStatus[]): Promise<Product | null> {
         return this.repo.findOne({
-            where: { slug },
+            where: statuses?.length ? { slug, status: In(statuses) } : { slug },
             relations: DETAIL_RELATIONS,
             order: DETAIL_ORDER,
         });
+    }
+
+    async existsWithStatus(id: string, statuses: ProductStatus[]): Promise<boolean> {
+        return (await this.repo.count({ where: { id, status: In(statuses) } })) > 0;
     }
 
     findByIds(ids: string[]): Promise<Product[]> {

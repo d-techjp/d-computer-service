@@ -37,6 +37,19 @@ export class TypeOrmProductVariantsRepository extends ProductVariantsRepository 
         return this.repo.find({ where: { id: In(ids) }, relations: { product: true } });
     }
 
+    async findCostPrices(variantIds: string[]): Promise<Map<string, number | null>> {
+        if (variantIds.length === 0) return new Map();
+
+        // Khai `select` tường minh là cách duy nhất kéo được cột `select: false`
+        // ra. Đi qua entity (không phải getRawMany) nên `ColumnNumericTransformer`
+        // vẫn chạy và trả number thay vì string của driver pg.
+        const rows = await this.repo.find({
+            where: { id: In(variantIds) },
+            select: { id: true, costPrice: true },
+        });
+        return new Map(rows.map((row) => [row.id, row.costPrice]));
+    }
+
     findByProductId(productId: string): Promise<ProductVariant[]> {
         return this.repo.find({
             where: { productId },

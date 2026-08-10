@@ -1,25 +1,45 @@
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import type { QueryProductDto } from '../dto/query-product.dto';
-import type { Product } from '../entities/product.entity';
+import type { Product, ProductStatus } from '../entities/product.entity';
+
+export interface ProductSearchOptions {
+    /**
+     * Khi lọc theo danh mục kèm danh mục con, service tự resolve cây danh mục qua
+     * `CategoriesService` (business logic) rồi truyền danh sách id phẳng xuống đây
+     * — repository không biết gì về cấu trúc cây.
+     */
+    categoryIds?: string[];
+
+    /**
+     * Giới hạn trạng thái được trả về, ĐỘC LẬP với `criteria.status` do người dùng
+     * gửi lên. Bỏ trống = không giới hạn (quản trị). Storefront luôn truyền tập
+     * trạng thái công khai để hàng nháp / đã archive không lọt ra ngoài dù client
+     * có cố gửi filter gì đi nữa.
+     */
+    statuses?: ProductStatus[];
+}
 
 export abstract class ProductsRepository {
     abstract create(data: Partial<Product>): Product;
 
     abstract save(product: Product): Promise<Product>;
 
-    /**
-     * `categoryIds`: khi lọc theo danh mục kèm danh mục con, service tự resolve
-     * cây danh mục qua `CategoriesService` (business logic) rồi truyền danh sách
-     * id phẳng xuống đây — repository không biết gì về cấu trúc cây.
-     */
     abstract search(
         criteria: QueryProductDto,
-        categoryIds?: string[],
+        options?: ProductSearchOptions,
     ): Promise<RepositoryPage<Product>>;
 
-    abstract findById(id: string): Promise<Product | null>;
+    /** `statuses`: bỏ trống = tìm mọi trạng thái; truyền vào = ngoài tập đó coi như không tồn tại. */
+    abstract findById(id: string, statuses?: ProductStatus[]): Promise<Product | null>;
 
-    abstract findBySlug(slug: string): Promise<Product | null>;
+    abstract findBySlug(slug: string, statuses?: ProductStatus[]): Promise<Product | null>;
+
+    /**
+     * Sản phẩm có tồn tại và nằm trong tập trạng thái cho phép không. Dùng để gác
+     * các endpoint dữ liệu con (biến thể, option, mô tả) — nhẹ hơn `findById` vì
+     * không nạp kèm quan hệ nào.
+     */
+    abstract existsWithStatus(id: string, statuses: ProductStatus[]): Promise<boolean>;
 
     abstract findByIds(ids: string[]): Promise<Product[]>;
 
