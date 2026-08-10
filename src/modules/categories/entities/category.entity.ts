@@ -46,4 +46,16 @@ export class Category extends SoftDeletableEntity {
 
     @OneToMany(() => Product, (product) => product.category)
     products: Product[];
+
+    /**
+     * Số sản phẩm (chưa xoá) thuộc TRỰC TIẾP danh mục này — không gồm danh mục
+     * con. Transient: không phải cột DB, chỉ được gắn ở `GET /categories` và
+     * `GET /admin/categories` (danh sách phân trang) trong
+     * `TypeOrmCategoriesRepository.search()`; không có ở chi tiết hay cây danh mục.
+     */
+    @ApiPropertyOptional({
+        default: 0,
+        description: 'Số sản phẩm chưa xoá thuộc trực tiếp danh mục này — chỉ có ở danh sách',
+    })
+    productCount?: number;
 }
