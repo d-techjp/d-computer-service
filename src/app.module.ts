@@ -15,6 +15,7 @@ import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module
 import { ArticlesModule } from './modules/articles/articles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BrandsModule } from './modules/brands/brands.module';
+import { CarouselsModule } from './modules/carousels/carousels.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { HealthModule } from './modules/health/health.module';
 import { OrdersModule } from './modules/orders/orders.module';
@@ -51,6 +52,7 @@ import { RedisModule } from './redis/redis.module';
         CategoriesModule,
         BrandsModule,
         ProductsModule,
+        CarouselsModule,
         ArticlesModule,
         OrdersModule,
         UploadsModule,
