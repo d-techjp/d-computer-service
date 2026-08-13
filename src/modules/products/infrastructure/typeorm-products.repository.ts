@@ -3,21 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository, SelectQueryBuilder } from 'typeorm';
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import { resolveSortColumn } from '../../../common/utils/query.util';
+import { PRODUCT_SORTABLE_COLUMNS } from '../domain/product-sortable-columns';
 import type { ProductSearchOptions } from '../domain/products.repository';
 import { ProductsRepository } from '../domain/products.repository';
 import type { QueryProductDto } from '../dto/query-product.dto';
 import { Product, ProductStatus } from '../entities/product.entity';
 import { refreshProductAggregates } from './product-aggregates';
-
-const SORTABLE_COLUMNS = [
-    'createdAt',
-    'updatedAt',
-    'name',
-    'minPrice',
-    'totalStock',
-    'soldCount',
-    'viewCount',
-] as const;
 
 /** Chi tiết sản phẩm nạp kèm toàn bộ biến thể + tổ hợp option của từng biến thể. */
 const DETAIL_RELATIONS = {
@@ -64,7 +55,7 @@ export class TypeOrmProductsRepository extends ProductsRepository {
     ): Promise<RepositoryPage<Product>> {
         const qb = this.buildSearchQuery(criteria, options);
 
-        const sortBy = resolveSortColumn(criteria.sortBy, SORTABLE_COLUMNS, 'createdAt');
+        const sortBy = resolveSortColumn(criteria.sortBy, PRODUCT_SORTABLE_COLUMNS, 'createdAt');
         // skip/take (không phải offset/limit) để phân trang theo sản phẩm,
         // không bị lệch vì join bảng variants quan hệ 1-n
         qb.orderBy(`product.${sortBy}`, criteria.sortOrder)

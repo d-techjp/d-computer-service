@@ -19,6 +19,7 @@ export enum PermissionCode {
     PRODUCT_MANAGE = 'product.manage',
     PRODUCT_CATEGORY_MANAGE = 'product.category.manage',
     PRODUCT_BRAND_MANAGE = 'product.brand.manage',
+    PRODUCT_CAROUSEL_MANAGE = 'product.carousel.manage',
 
     ARTICLE_MANAGE = 'articles.manage',
 
@@ -81,6 +82,12 @@ export const PERMISSION_CATALOG: readonly PermissionDefinition[] = [
         description: 'Tạo, sửa, xoá thương hiệu',
     },
     {
+        code: PermissionCode.PRODUCT_CAROUSEL_MANAGE,
+        name: 'Quản lý carousel',
+        module: 'product',
+        description: 'Tạo, sửa, xoá carousel và bộ lọc sản phẩm gắn kèm',
+    },
+    {
         code: PermissionCode.ARTICLE_MANAGE,
         name: 'Quản lý bài viết',
         module: 'article',
@@ -134,6 +141,7 @@ export const SYSTEM_ROLES: readonly RoleDefinition[] = [
             PermissionCode.PRODUCT_MANAGE,
             PermissionCode.PRODUCT_CATEGORY_MANAGE,
             PermissionCode.PRODUCT_BRAND_MANAGE,
+            PermissionCode.PRODUCT_CAROUSEL_MANAGE,
             PermissionCode.ARTICLE_MANAGE,
         ],
     },
