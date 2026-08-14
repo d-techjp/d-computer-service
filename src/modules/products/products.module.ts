@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BrandsModule } from '../brands/brands.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { InventoryModule } from '../inventory/inventory.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { AdminCostPriceService } from './admin/admin-cost-price.service';
 import { AdminProductsController } from './admin/admin-products.controller';
@@ -45,6 +46,7 @@ import { TypeOrmProductsRepository } from './infrastructure/typeorm-products.rep
         CategoriesModule,
         BrandsModule,
         UploadsModule,
+        InventoryModule,
     ],
     controllers: [
         ClientProductsController,

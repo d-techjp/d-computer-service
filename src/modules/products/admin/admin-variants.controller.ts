@@ -16,6 +16,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation } from '@nestjs/swagger';
 import { LogActivity } from '../../../common/decorators/activity-log.decorator';
 import { AdminController } from '../../../common/decorators/admin-controller.decorator';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../../common/decorators/require-permissions.decorator';
 import { PermissionCode } from '../../../common/enums/permission.enum';
 import { ActivityAction } from '../../activity-logs/enums/activity-action.enum';
@@ -107,9 +108,10 @@ export class AdminVariantsController {
     async adjustStock(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() dto: AdjustStockDto,
+        @CurrentUser('id') performedById: string,
     ): Promise<ProductVariant> {
         return this.costPriceService.attachToVariant(
-            await this.variantsService.adjustStock(id, dto.delta, dto.reason),
+            await this.variantsService.adjustStock(id, dto.delta, dto.reason, performedById),
         );
     }
 

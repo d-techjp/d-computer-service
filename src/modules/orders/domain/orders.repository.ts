@@ -1,4 +1,5 @@
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
+import type { RecordMovementInput } from '../../inventory/domain/inventory.repository';
 import type { ProductBundleItem } from '../../products/entities/product-bundle-item.entity';
 import type { ProductVariant } from '../../products/entities/product-variant.entity';
 import type { QueryOrderDto } from '../dto/query-order.dto';
@@ -45,6 +46,13 @@ export interface OrdersUnitOfWork {
 
     /** Kiểm tra trùng mã đơn, tính cả bản ghi đã soft-delete. */
     codeExists(code: string): Promise<boolean>;
+
+    /**
+     * Ghi một dòng sổ nhập-xuất kho — cùng transaction với việc trừ/hoàn kho ở
+     * trên, để sổ kho không bao giờ lệch với `ProductVariant.stock`. Xem
+     * `InventoryModule`/`recordInventoryMovement`.
+     */
+    recordInventoryMovement(data: RecordMovementInput): Promise<void>;
 }
 
 export abstract class OrdersRepository {

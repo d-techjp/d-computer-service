@@ -5,6 +5,12 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { slugify } from '../../../common/utils/slug.util';
+import { InventoryService } from '../../inventory/application/inventory.service';
+import {
+    InventoryReasonCode,
+    InventoryReferenceType,
+    InventoryTransactionType,
+} from '../../inventory/enums/inventory.enum';
 import { UploadFolder } from '../../uploads/constants/upload.constants';
 import { UploadsService } from '../../uploads/uploads.service';
 import { ProductOptionsRepository } from '../domain/product-options.repository';
@@ -36,6 +42,7 @@ export class ProductVariantsService {
         private readonly bundleItemsRepository: ProductBundleItemsRepository,
         private readonly bundlesService: ProductBundlesService,
         private readonly uploadsService: UploadsService,
+        private readonly inventoryService: InventoryService,
     ) {}
 
     /**
@@ -247,7 +254,12 @@ export class ProductVariantsService {
     }
 
     /** Điều chỉnh tồn kho thủ công (nhập hàng, kiểm kê). `delta` âm để trừ. */
-    async adjustStock(id: string, delta: number, reason?: string): Promise<ProductVariant> {
+    async adjustStock(
+        id: string,
+        delta: number,
+        reason?: string,
+        performedById: string | null = null,
+    ): Promise<ProductVariant> {
         const variant = await this.findOne(id);
 
         if (!variant.trackInventory) {
@@ -262,6 +274,7 @@ export class ProductVariantsService {
             );
         }
 
+        const stockBefore = variant.stock;
         const nextStock = variant.stock + delta;
         if (nextStock < 0) {
             throw new BadRequestException(
@@ -270,11 +283,23 @@ export class ProductVariantsService {
         }
 
         variant.stock = nextStock;
-        void reason; // reason được ghi ở activity log qua interceptor
 
         const saved = await this.variantsRepository.save(variant);
         await this.productsRepository.refreshAggregates(saved.productId);
         await this.bundlesService.refreshBundlesContaining([saved.id]);
+
+        await this.inventoryService.recordManualMovement({
+            variantId: saved.id,
+            type: delta > 0 ? InventoryTransactionType.IN : InventoryTransactionType.OUT,
+            reasonCode: InventoryReasonCode.STOCKTAKE_ADJUSTMENT,
+            quantity: Math.abs(delta),
+            stockBefore,
+            stockAfter: saved.stock,
+            referenceType: InventoryReferenceType.MANUAL,
+            performedById,
+            note: reason ?? null,
+        });
+
         return saved;
     }
 
