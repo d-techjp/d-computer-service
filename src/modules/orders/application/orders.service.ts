@@ -9,6 +9,11 @@ import { PaginatedResult } from '../../../common/dto/paginated-result.dto';
 import { PermissionCode } from '../../../common/enums/permission.enum';
 import type { AuthenticatedUser } from '../../../common/interfaces/authenticated-user.interface';
 import {
+    InventoryReasonCode,
+    InventoryReferenceType,
+    InventoryTransactionType,
+} from '../../inventory/enums/inventory.enum';
+import {
     BundleInventoryPolicy,
     type ProductVariant,
 } from '../../products/entities/product-variant.entity';
@@ -72,6 +77,14 @@ export class OrdersService {
                 const childItems: OrderItem[] = [];
                 const touchedProductIds = new Set<string>();
                 const touchedComponentIds = new Set<string>();
+                // Ghi sổ kho cần orderId — order chỉ có id sau `saveOrder`, nên
+                // gom lại đây rồi ghi hàng loạt bên dưới, vẫn trong cùng transaction.
+                const stockMovements: Array<{
+                    variantId: string;
+                    quantity: number;
+                    stockBefore: number;
+                    stockAfter: number;
+                }> = [];
                 let subtotal = 0;
 
                 for (const input of dto.items) {
@@ -149,14 +162,32 @@ export class OrdersService {
                                 }),
                             );
 
+                            const componentStockBefore = componentVariant.stock;
                             this.consumeStock(componentVariant, needed);
                             await uow.saveVariant(componentVariant);
+                            if (componentVariant.trackInventory) {
+                                stockMovements.push({
+                                    variantId: componentVariant.id,
+                                    quantity: needed,
+                                    stockBefore: componentStockBefore,
+                                    stockAfter: componentVariant.stock,
+                                });
+                            }
                             touchedProductIds.add(componentVariant.productId);
                             touchedComponentIds.add(componentVariant.id);
                         }
                     } else {
                         this.assertStockEnough(variant, input.quantity);
+                        const stockBefore = variant.stock;
                         this.consumeStock(variant, input.quantity);
+                        if (variant.trackInventory) {
+                            stockMovements.push({
+                                variantId: variant.id,
+                                quantity: input.quantity,
+                                stockBefore,
+                                stockAfter: variant.stock,
+                            });
+                        }
                     }
 
                     variant.soldCount += input.quantity;
@@ -191,6 +222,21 @@ export class OrdersService {
                 for (const child of childItems) child.orderId = saved.id;
                 await uow.saveOrderItems(childItems);
                 await uow.refreshProductAggregates([...touchedProductIds]);
+
+                for (const movement of stockMovements) {
+                    await uow.recordInventoryMovement({
+                        variantId: movement.variantId,
+                        type: InventoryTransactionType.OUT,
+                        reasonCode: InventoryReasonCode.ORDER_SALE,
+                        quantity: movement.quantity,
+                        stockBefore: movement.stockBefore,
+                        stockAfter: movement.stockAfter,
+                        referenceType: InventoryReferenceType.ORDER,
+                        referenceId: saved.id,
+                        performedById: userId,
+                        note: saved.code,
+                    });
+                }
 
                 return { order: saved, touchedComponentIds: [...touchedComponentIds] };
             },
@@ -232,9 +278,14 @@ export class OrdersService {
     /**
      * Đổi trạng thái theo máy trạng thái. Khi huỷ đơn thì hoàn kho trong cùng transaction.
      */
-    async updateStatus(id: string, nextStatus: OrderStatus, reason?: string): Promise<Order> {
+    async updateStatus(
+        id: string,
+        nextStatus: OrderStatus,
+        reason?: string,
+        performedById: string | null = null,
+    ): Promise<Order> {
         const { order, restoredComponentIds } = await this.ordersRepository.runTransaction(
-            async (uow) => this.applyStatusTransition(uow, id, nextStatus, reason),
+            async (uow) => this.applyStatusTransition(uow, id, nextStatus, reason, performedById),
         );
 
         await this.bundlesService.refreshBundlesContaining(restoredComponentIds);
@@ -246,6 +297,7 @@ export class OrdersService {
         id: string,
         nextStatus: OrderStatus,
         reason?: string,
+        performedById: string | null = null,
     ): Promise<{ order: Order; restoredComponentIds: string[] }> {
         const order = await uow.findOrderWithItems(id);
         if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
@@ -256,7 +308,7 @@ export class OrdersService {
         if (nextStatus === OrderStatus.CANCELLED) {
             if (!reason) throw new BadRequestException('Cần nhập lý do khi huỷ đơn');
             if (STOCK_RESERVED_STATUSES.includes(order.status)) {
-                restoredComponentIds = await this.restoreStock(uow, order);
+                restoredComponentIds = await this.restoreStock(uow, order, performedById);
             }
             order.cancelReason = reason;
             order.cancelledAt = new Date();
@@ -284,7 +336,12 @@ export class OrdersService {
                 'Chỉ huỷ được đơn đang chờ xác nhận — vui lòng liên hệ cửa hàng',
             );
         }
-        return this.updateStatus(id, OrderStatus.CANCELLED, reason ?? 'Khách hàng huỷ đơn');
+        return this.updateStatus(
+            id,
+            OrderStatus.CANCELLED,
+            reason ?? 'Khách hàng huỷ đơn',
+            user.id,
+        );
     }
 
     /** Quyền xem/thao tác trên đơn của người khác — theo permission, không theo role code. */
@@ -317,7 +374,11 @@ export class OrdersService {
      * và dòng cha KHÔNG có con (hàng thường hoặc combo `own_stock`). Dòng cha có
      * con chỉ hoàn `soldCount` — kho của nó chưa từng bị trừ.
      */
-    private async restoreStock(uow: OrdersUnitOfWork, order: Order): Promise<string[]> {
+    private async restoreStock(
+        uow: OrdersUnitOfWork,
+        order: Order,
+        performedById: string | null,
+    ): Promise<string[]> {
         const variantIds = order.items
             .map((item) => item.variantId)
             .filter((id): id is string => id !== null);
@@ -337,8 +398,22 @@ export class OrdersService {
 
             const isBundleParent = parentIdsWithChildren.has(item.id);
             if (!isBundleParent && variant.trackInventory) {
+                const stockBefore = variant.stock;
                 variant.stock += item.quantity;
                 if (item.parentItemId !== null) touchedComponentIds.push(variant.id);
+
+                await uow.recordInventoryMovement({
+                    variantId: variant.id,
+                    type: InventoryTransactionType.IN,
+                    reasonCode: InventoryReasonCode.ORDER_CANCELLED,
+                    quantity: item.quantity,
+                    stockBefore,
+                    stockAfter: variant.stock,
+                    referenceType: InventoryReferenceType.ORDER,
+                    referenceId: order.id,
+                    performedById,
+                    note: order.code,
+                });
             }
             variant.soldCount = Math.max(0, variant.soldCount - item.quantity);
 

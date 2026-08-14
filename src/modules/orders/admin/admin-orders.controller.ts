@@ -2,6 +2,7 @@ import { Body, Get, Param, ParseUUIDPipe, Patch, Query } from '@nestjs/common';
 import { ApiOperation } from '@nestjs/swagger';
 import { LogActivity } from '../../../common/decorators/activity-log.decorator';
 import { AdminController } from '../../../common/decorators/admin-controller.decorator';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../../common/dto/paginated-result.dto';
 import { PermissionCode } from '../../../common/enums/permission.enum';
@@ -40,8 +41,9 @@ export class AdminOrdersController {
     updateStatus(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() dto: UpdateOrderStatusDto,
+        @CurrentUser('id') performedById: string,
     ): Promise<Order> {
-        return this.ordersService.updateStatus(id, dto.status, dto.reason);
+        return this.ordersService.updateStatus(id, dto.status, dto.reason, performedById);
     }
 
     @Patch(':id/payment-status')

@@ -3,6 +3,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, type EntityManager, In, Repository } from 'typeorm';
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import { resolveSortColumn } from '../../../common/utils/query.util';
+import { recordInventoryMovement } from '../../inventory/infrastructure/record-inventory-movement';
 import { ProductBundleItem } from '../../products/entities/product-bundle-item.entity';
 import { ProductVariant } from '../../products/entities/product-variant.entity';
 import { refreshProductAggregates } from '../../products/infrastructure/product-aggregates';
@@ -110,6 +111,8 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
             findOrderWithItems: (id) =>
                 manager.findOne(Order, { where: { id }, relations: { items: true } }),
             codeExists: (code) => manager.exists(Order, { where: { code }, withDeleted: true }),
+            recordInventoryMovement: (data) =>
+                recordInventoryMovement(manager, data).then(() => undefined),
         };
     }
 
