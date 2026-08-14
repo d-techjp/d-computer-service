@@ -5,9 +5,9 @@ import {
     ArrayMaxSize,
     ArrayMinSize,
     IsArray,
+    IsDefined,
     IsEnum,
     IsInt,
-    IsNumber,
     IsOptional,
     IsString,
     IsUUID,
@@ -89,7 +89,11 @@ export class CreateOrderDto {
     @Type(() => OrderItemInputDto)
     items: OrderItemInputDto[];
 
+    // `@IsDefined()` là bắt buộc: `@ValidateNested()` bỏ qua giá trị `undefined`
+    // nên thiếu hẳn `shippingAddress` sẽ lọt qua validation, rồi mới vỡ ở tầng DB
+    // (cột `shipping_address` NOT NULL) thành lỗi 500 khó hiểu.
     @ApiProperty({ type: ShippingAddressDto })
+    @IsDefined({ message: 'Vui lòng nhập địa chỉ giao hàng' })
     @ValidateNested()
     @Type(() => ShippingAddressDto)
     shippingAddress: ShippingAddressDto;
@@ -99,19 +103,11 @@ export class CreateOrderDto {
     @IsOptional()
     paymentMethod?: PaymentMethod;
 
-    @ApiPropertyOptional({ example: 30000, default: 0 })
-    @Type(() => Number)
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    @IsOptional()
-    shippingFee?: number;
-
-    @ApiPropertyOptional({ example: 0, default: 0, description: 'Số tiền giảm giá' })
-    @Type(() => Number)
-    @IsNumber({ maxDecimalPlaces: 2 })
-    @Min(0)
-    @IsOptional()
-    discount?: number;
+    // KHÔNG có `discount`/`shippingFee` ở đây: hai số này quyết định số tiền phải
+    // trả nên phải do server tính. Trước đây client gửi thẳng lên và chỉ bị chặn
+    // bởi `discount > subtotal`, tức khách tự giảm giá đơn của mình xuống gần 0.
+    // Truyền qua tham số `pricing` của `OrdersService.create` thay vì qua DTO.
+    // `forbidNonWhitelisted` của ValidationPipe tự trả 400 nếu client còn gửi.
 
     @ApiPropertyOptional()
     @IsString()

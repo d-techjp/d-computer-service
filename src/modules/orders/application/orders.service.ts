@@ -51,8 +51,17 @@ export class OrdersService {
      * + dòng con cho từng thành phần (`unitPrice = 0`), và CHỈ trừ kho thành
      * phần — trừ cả hai sẽ làm hụt kho gấp đôi. Combo `own_stock` là kit đóng
      * sẵn nên trừ thẳng kho của chính nó, không đụng thành phần.
+     *
+     * `pricing` là tham số của SERVER, không phải input của khách: `discount` và
+     * `shippingFee` từng nằm trong `CreateOrderDto` nên khách tự gửi lên được và
+     * tự giảm giá đơn của mình. Chỗ gọi nào có logic tính tiền (checkout, sau này
+     * là coupon/phí ship) thì truyền vào đây; mặc định là không giảm, không phí.
      */
-    async create(dto: CreateOrderDto, userId: string | null): Promise<Order> {
+    async create(
+        dto: CreateOrderDto,
+        userId: string | null,
+        pricing: { discount: number; shippingFee: number } = { discount: 0, shippingFee: 0 },
+    ): Promise<Order> {
         const { order, touchedComponentIds } = await this.ordersRepository.runTransaction(
             async (uow) => {
                 const requestedIds = dto.items.map((item) => item.variantId);
@@ -195,8 +204,8 @@ export class OrdersService {
                 }
 
                 subtotal = this.round(subtotal);
-                const discount = this.round(dto.discount ?? 0);
-                const shippingFee = this.round(dto.shippingFee ?? 0);
+                const discount = this.round(pricing.discount);
+                const shippingFee = this.round(pricing.shippingFee);
 
                 if (discount > subtotal) {
                     throw new BadRequestException('Giảm giá không được lớn hơn tổng tiền hàng');
