@@ -1,13 +1,14 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LogActivity } from '../../../common/decorators/activity-log.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { OptionalJwtAuthGuard } from '../../../common/guards/optional-jwt-auth.guard';
 import type { AuthenticatedUser } from '../../../common/interfaces/authenticated-user.interface';
 import { ActivityAction } from '../../activity-logs/enums/activity-action.enum';
-import type { Order } from '../../orders/entities/order.entity';
-import { type CheckoutPreview, CheckoutService } from '../application/checkout.service';
+import { Order } from '../../orders/entities/order.entity';
+import { CheckoutService } from '../application/checkout.service';
+import { CheckoutSummaryDto } from './dto/checkout-summary.dto';
 import { CheckoutPreviewDto } from '../dto/checkout-preview.dto';
 import { PlaceOrderDto } from '../dto/place-order.dto';
 
@@ -24,6 +25,7 @@ export class ClientCheckoutController {
     // (lọt vào log truy cập, lịch sử trình duyệt, referer).
     @Post('preview')
     @HttpCode(HttpStatus.OK)
+    @ApiOkResponse({ type: CheckoutSummaryDto })
     @ApiOperation({
         summary: 'Tính tiền đơn hàng từ giỏ (sau khi khách nhập địa chỉ)',
         description:
@@ -33,12 +35,13 @@ export class ClientCheckoutController {
     preview(
         @Body() dto: CheckoutPreviewDto,
         @CurrentUser() user?: AuthenticatedUser,
-    ): Promise<CheckoutPreview> {
+    ): Promise<CheckoutSummaryDto> {
         return this.checkoutService.preview(dto, user);
     }
 
     @Post()
     @LogActivity({ action: ActivityAction.ORDER_PLACED, resource: 'order' })
+    @ApiCreatedResponse({ type: Order })
     @ApiOperation({
         summary: 'Đặt hàng',
         description:

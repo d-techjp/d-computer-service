@@ -4,22 +4,12 @@ import { OrdersService } from '../../orders/application/orders.service';
 import type { CreateOrderDto, ShippingAddressDto } from '../../orders/dto/create-order.dto';
 import type { Order } from '../../orders/entities/order.entity';
 import { PaymentMethod } from '../../orders/enums/order.enum';
-import { type PublicCartItemDto, toPublicCart } from '../client/dto/public-cart.dto';
+import type { CheckoutSummaryDto } from '../client/dto/checkout-summary.dto';
+import { toPublicCart } from '../client/dto/public-cart.dto';
 import type { CheckoutPreviewDto } from '../dto/checkout-preview.dto';
 import type { PlaceOrderDto } from '../dto/place-order.dto';
 import type { Cart } from '../entities/cart.entity';
 import { CartsService } from './carts.service';
-
-export interface CheckoutPreview {
-    items: PublicCartItemDto[];
-    subtotal: number;
-    discount: number;
-    shippingFee: number;
-    total: number;
-    shippingAddress: ShippingAddressDto;
-    paymentMethods: PaymentMethod[];
-    canPlaceOrder: boolean;
-}
 
 /** Chưa có mã giảm giá lẫn phí vận chuyển — giữ ở một chỗ để sau này thay bằng logic thật. */
 const DISCOUNT = 0;
@@ -36,7 +26,7 @@ export class CheckoutService {
      * Tính tiền từ giỏ sau khi khách đã nhập địa chỉ. KHÔNG tạo đơn, không trừ
      * kho, không đổi gì trong DB — gọi lại bao nhiêu lần cũng được.
      */
-    async preview(dto: CheckoutPreviewDto, user?: AuthenticatedUser): Promise<CheckoutPreview> {
+    async preview(dto: CheckoutPreviewDto, user?: AuthenticatedUser): Promise<CheckoutSummaryDto> {
         const cart = await this.loadCheckoutableCart(dto.cartId, user);
         return this.buildPreview(cart, dto.shippingAddress);
     }
@@ -90,7 +80,7 @@ export class CheckoutService {
         return cart;
     }
 
-    private buildPreview(cart: Cart, shippingAddress: ShippingAddressDto): CheckoutPreview {
+    private buildPreview(cart: Cart, shippingAddress: ShippingAddressDto): CheckoutSummaryDto {
         const view = toPublicCart(cart);
         const subtotal = view.subtotal;
 

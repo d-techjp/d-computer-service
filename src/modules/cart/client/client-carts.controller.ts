@@ -11,7 +11,7 @@ import {
     Post,
     UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
 import { OptionalJwtAuthGuard } from '../../../common/guards/optional-jwt-auth.guard';
@@ -37,6 +37,7 @@ export class ClientCartsController {
     constructor(private readonly cartsService: CartsService) {}
 
     @Post()
+    @ApiCreatedResponse({ type: PublicCartDto })
     @ApiOperation({
         summary: 'Tạo giỏ hàng rỗng',
         description:
@@ -48,6 +49,7 @@ export class ClientCartsController {
     }
 
     @Get(':cartId')
+    @ApiOkResponse({ type: PublicCartDto })
     @ApiOperation({
         summary: 'Xem giỏ hàng',
         description: '`unitPrice` là giá hiện tại trong DB, không phải giá lúc thêm vào giỏ.',
@@ -63,6 +65,7 @@ export class ClientCartsController {
     // cùng biến thể chỉ cộng dồn vào dòng sẵn có, và có thể bị từ chối hoàn toàn.
     @Post(':cartId/items')
     @HttpCode(HttpStatus.OK)
+    @ApiOkResponse({ type: CartMutationResultDto })
     @ApiOperation({
         summary: 'Thêm sản phẩm vào giỏ',
         description:
@@ -78,6 +81,7 @@ export class ClientCartsController {
     }
 
     @Patch(':cartId/items/:itemId')
+    @ApiOkResponse({ type: CartMutationResultDto })
     @ApiOperation({
         summary: 'Đổi số lượng một dòng',
         description: 'Số lượng tuyệt đối, không phải cộng thêm. Cùng shape response như thêm mới.',
@@ -92,6 +96,7 @@ export class ClientCartsController {
     }
 
     @Delete(':cartId/items/:itemId')
+    @ApiOkResponse({ type: PublicCartDto })
     @ApiOperation({ summary: 'Bỏ một dòng khỏi giỏ' })
     removeItem(
         @Param('cartId', ParseUUIDPipe) cartId: string,
@@ -102,6 +107,7 @@ export class ClientCartsController {
     }
 
     @Delete(':cartId/items')
+    @ApiOkResponse({ type: PublicCartDto })
     @ApiOperation({ summary: 'Xoá sạch giỏ hàng' })
     clear(
         @Param('cartId', ParseUUIDPipe) cartId: string,
