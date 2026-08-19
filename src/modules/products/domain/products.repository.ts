@@ -17,6 +17,14 @@ export interface ProductSearchOptions {
      * có cố gửi filter gì đi nữa.
      */
     statuses?: ProductStatus[];
+
+    /**
+     * Id danh mục đã tắt hiển thị (hoặc có tổ tiên bị tắt) — sản phẩm thuộc các
+     * danh mục này bị loại khỏi kết quả. Cũng do storefront áp đặt, độc lập với
+     * `criteria.categoryId`; sản phẩm không gắn danh mục nào (`categoryId IS NULL`)
+     * không bị ảnh hưởng bởi bộ lọc này.
+     */
+    excludedCategoryIds?: string[];
 }
 
 export abstract class ProductsRepository {
@@ -39,7 +47,11 @@ export abstract class ProductsRepository {
      * các endpoint dữ liệu con (biến thể, option, mô tả) — nhẹ hơn `findById` vì
      * không nạp kèm quan hệ nào.
      */
-    abstract existsWithStatus(id: string, statuses: ProductStatus[]): Promise<boolean>;
+    abstract existsWithStatus(
+        id: string,
+        statuses: ProductStatus[],
+        excludedCategoryIds?: string[],
+    ): Promise<boolean>;
 
     abstract findByIds(ids: string[]): Promise<Product[]>;
 

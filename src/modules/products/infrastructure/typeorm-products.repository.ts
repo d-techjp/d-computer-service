@@ -103,6 +103,15 @@ export class TypeOrmProductsRepository extends ProductsRepository {
             qb.andWhere('product.categoryId = :categoryId', { categoryId: criteria.categoryId });
         }
 
+        // `categoryId IS NULL` phải lọt qua — NOT IN với cột có thể NULL sẽ loại
+        // oan các dòng đó nếu thiếu nhánh OR này (NULL NOT IN (...) = UNKNOWN).
+        if (options?.excludedCategoryIds?.length) {
+            qb.andWhere(
+                '(product.categoryId IS NULL OR product.categoryId NOT IN (:...excludedCategoryIds))',
+                { excludedCategoryIds: options.excludedCategoryIds },
+            );
+        }
+
         // Rào trạng thái do phía gọi áp đặt — cộng dồn (AND) với `criteria.status`
         // của người dùng, nên client không thể nới rộng phạm vi bằng query param.
         if (options?.statuses?.length) {
@@ -153,8 +162,24 @@ export class TypeOrmProductsRepository extends ProductsRepository {
         });
     }
 
-    async existsWithStatus(id: string, statuses: ProductStatus[]): Promise<boolean> {
-        return (await this.repo.count({ where: { id, status: In(statuses) } })) > 0;
+    async existsWithStatus(
+        id: string,
+        statuses: ProductStatus[],
+        excludedCategoryIds?: string[],
+    ): Promise<boolean> {
+        const qb = this.repo
+            .createQueryBuilder('product')
+            .where('product.id = :id', { id })
+            .andWhere('product.status IN (:...statuses)', { statuses });
+
+        if (excludedCategoryIds?.length) {
+            qb.andWhere(
+                '(product.categoryId IS NULL OR product.categoryId NOT IN (:...excludedCategoryIds))',
+                { excludedCategoryIds },
+            );
+        }
+
+        return (await qb.getCount()) > 0;
     }
 
     findByIds(ids: string[]): Promise<Product[]> {

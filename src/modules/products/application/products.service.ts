@@ -88,13 +88,23 @@ export class ProductsService {
                 ? await this.categoriesService.collectSubtreeIds(query.categoryId)
                 : undefined;
 
-        const page = await this.productsRepository.search(query, { categoryIds, statuses });
+        // `statuses` có giá trị = đang gọi từ storefront -> ẩn luôn nhánh danh mục đã tắt
+        const excludedCategoryIds = statuses?.length
+            ? [...(await this.categoriesService.collectHiddenCategoryIds())]
+            : undefined;
+
+        const page = await this.productsRepository.search(query, {
+            categoryIds,
+            statuses,
+            excludedCategoryIds,
+        });
         return new PaginatedResult(page.items, page.total, query.page, query.limit);
     }
 
     async findOne(id: string, statuses?: ProductStatus[]): Promise<Product> {
         const product = await this.productsRepository.findById(id, statuses);
         if (!product) throw new NotFoundException(`Không tìm thấy sản phẩm với id ${id}`);
+        await this.assertCategoryVisible(product, statuses);
         return this.withGalleryImages(product);
     }
 
@@ -103,6 +113,7 @@ export class ProductsService {
         // được tìm thấy nên lượt xem cũng không bị cộng oan cho hàng nháp.
         const product = await this.productsRepository.findBySlug(slug, statuses);
         if (!product) throw new NotFoundException(`Không tìm thấy sản phẩm với slug ${slug}`);
+        await this.assertCategoryVisible(product, statuses);
 
         // Đếm lượt xem không chặn response và không đụng tới updatedAt
         await this.productsRepository.incrementViewCount(product.id);
@@ -159,11 +170,38 @@ export class ProductsService {
      * liệu con thay vì gọi `findOne` cho tốn.
      */
     async assertExists(productId: string, statuses?: ProductStatus[]): Promise<void> {
-        const exists = statuses?.length
-            ? await this.productsRepository.existsWithStatus(productId, statuses)
-            : (await this.productsRepository.findByIds([productId])).length > 0;
+        let exists: boolean;
+        if (statuses?.length) {
+            const excludedCategoryIds = [
+                ...(await this.categoriesService.collectHiddenCategoryIds()),
+            ];
+            exists = await this.productsRepository.existsWithStatus(
+                productId,
+                statuses,
+                excludedCategoryIds,
+            );
+        } else {
+            exists = (await this.productsRepository.findByIds([productId])).length > 0;
+        }
 
         if (!exists) throw new NotFoundException(`Không tìm thấy sản phẩm với id ${productId}`);
+    }
+
+    /**
+     * Chặn xem chi tiết sản phẩm thuộc nhánh danh mục đã tắt hiển thị — coi như
+     * không tồn tại với khách, cùng kiểu 404 với `ClientCategoriesService.assertVisible`.
+     * `statuses` rỗng/undefined = gọi từ quản trị, bỏ qua rào này.
+     */
+    private async assertCategoryVisible(
+        product: Product,
+        statuses?: ProductStatus[],
+    ): Promise<void> {
+        if (!statuses?.length || !product.categoryId) return;
+
+        const hidden = await this.categoriesService.collectHiddenCategoryIds();
+        if (hidden.has(product.categoryId)) {
+            throw new NotFoundException(`Không tìm thấy sản phẩm với id ${product.id}`);
+        }
     }
 
     async updateDescription(productId: string, content: string): Promise<ProductDescriptionView> {

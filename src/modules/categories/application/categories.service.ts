@@ -134,7 +134,46 @@ export class CategoriesService {
         return [rootId, ...descendants];
     }
 
+    /**
+     * Id mọi danh mục không được hiển thị ở storefront: chính nó bị tắt, hoặc có
+     * tổ tiên bị tắt — tắt một danh mục cha kéo theo toàn bộ nhánh con ẩn theo,
+     * kể cả những nhánh con tự thân vẫn đang `isActive: true`. Dùng để ẩn sản
+     * phẩm thuộc các nhánh này khỏi API public.
+     */
+    async collectHiddenCategoryIds(): Promise<Set<string>> {
+        const categories = await this.categoriesRepository.findAllForTree(false);
+
+        const childIdsByParent = new Map<string, string[]>();
+        const inactiveIds: string[] = [];
+        for (const category of categories) {
+            if (category.parentId) {
+                const siblings = childIdsByParent.get(category.parentId) ?? [];
+                siblings.push(category.id);
+                childIdsByParent.set(category.parentId, siblings);
+            }
+            if (!category.isActive) inactiveIds.push(category.id);
+        }
+
+        const hidden = new Set<string>();
+        let frontier = inactiveIds;
+        while (frontier.length > 0) {
+            const next: string[] = [];
+            for (const id of frontier) {
+                if (hidden.has(id)) continue;
+                hidden.add(id);
+                next.push(...(childIdsByParent.get(id) ?? []));
+            }
+            frontier = next;
+        }
+        return hidden;
+    }
+
     async countActive(): Promise<number> {
         return this.categoriesRepository.countActiveRoots();
+    }
+
+    /** Cập nhật hàng loạt `sortOrder` sau khi kéo-thả sắp xếp lại danh mục ở màn quản trị. */
+    async reorder(items: { id: string; sortOrder: number }[]): Promise<void> {
+        await this.categoriesRepository.bulkUpdateSortOrder(items);
     }
 }

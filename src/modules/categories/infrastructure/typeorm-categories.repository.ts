@@ -121,4 +121,12 @@ export class TypeOrmCategoriesRepository extends CategoriesRepository {
         });
         return children.map((child) => child.id);
     }
+
+    async bulkUpdateSortOrder(items: { id: string; sortOrder: number }[]): Promise<void> {
+        await this.repo.manager.transaction(async (manager) => {
+            for (const item of items) {
+                await manager.update(Category, item.id, { sortOrder: item.sortOrder });
+            }
+        });
+    }
 }
