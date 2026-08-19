@@ -27,4 +27,7 @@ export abstract class CategoriesRepository {
 
     /** Id các category có parent nằm trong `parentIds` — dùng dựng cây con đệ quy. */
     abstract findIdsByParentIds(parentIds: string[]): Promise<string[]>;
+
+    /** Ghi đè `sortOrder` hàng loạt trong 1 transaction — dùng cho kéo-thả sắp xếp. */
+    abstract bulkUpdateSortOrder(items: { id: string; sortOrder: number }[]): Promise<void>;
 }

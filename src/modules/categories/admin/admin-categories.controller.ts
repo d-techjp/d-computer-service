@@ -21,6 +21,7 @@ import { ActivityAction } from '../../activity-logs/enums/activity-action.enum';
 import { CategoriesService } from '../application/categories.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { QueryCategoryDto } from '../dto/query-category.dto';
+import { ReorderCategoriesDto } from '../dto/reorder-categories.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
 import { Category } from '../entities/category.entity';
 
@@ -56,6 +57,18 @@ export class AdminCategoriesController {
     @ApiOperation({ summary: 'Tạo danh mục' })
     create(@Body() dto: CreateCategoryDto): Promise<Category> {
         return this.categoriesService.create(dto);
+    }
+
+    @Patch('reorder')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @LogActivity({
+        action: ActivityAction.UPDATE,
+        resource: 'category',
+        description: 'Sắp xếp lại thứ tự danh mục',
+    })
+    @ApiOperation({ summary: 'Cập nhật hàng loạt thứ tự hiển thị danh mục (kéo-thả)' })
+    reorder(@Body() dto: ReorderCategoriesDto): Promise<void> {
+        return this.categoriesService.reorder(dto.items);
     }
 
     @Patch(':id')

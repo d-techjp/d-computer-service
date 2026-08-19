@@ -21,6 +21,8 @@ export enum PermissionCode {
     PRODUCT_BRAND_MANAGE = 'product.brand.manage',
     PRODUCT_CAROUSEL_MANAGE = 'product.carousel.manage',
 
+    CAMPAIGN_TIKTOK_MANAGE = 'campaign.tiktok.manage',
+
     ARTICLE_MANAGE = 'articles.manage',
 
     ORDERS_MANAGE = 'orders.manage',
@@ -88,6 +90,12 @@ export const PERMISSION_CATALOG: readonly PermissionDefinition[] = [
         description: 'Tạo, sửa, xoá carousel và bộ lọc sản phẩm gắn kèm',
     },
     {
+        code: PermissionCode.CAMPAIGN_TIKTOK_MANAGE,
+        name: 'Quản lý video TikTok',
+        module: 'campaign',
+        description: 'Thêm, sửa, sắp xếp, xoá video TikTok hiển thị trên storefront',
+    },
+    {
         code: PermissionCode.ARTICLE_MANAGE,
         name: 'Quản lý bài viết',
         module: 'article',
@@ -142,6 +150,7 @@ export const SYSTEM_ROLES: readonly RoleDefinition[] = [
             PermissionCode.PRODUCT_CATEGORY_MANAGE,
             PermissionCode.PRODUCT_BRAND_MANAGE,
             PermissionCode.PRODUCT_CAROUSEL_MANAGE,
+            PermissionCode.CAMPAIGN_TIKTOK_MANAGE,
             PermissionCode.ARTICLE_MANAGE,
         ],
     },
