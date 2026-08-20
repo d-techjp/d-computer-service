@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsIn, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { PaginationQueryDto } from '../../../../common/dto/pagination-query.dto';
 import { toBoolean } from '../../../../common/transformers/transform.helpers';
 import { ProductStatus, ProductType } from '../../entities/product.entity';
@@ -9,6 +9,9 @@ import { VISIBLE_STATUSES } from '../client-visibility';
 /**
  * Bộ lọc storefront được phép dùng. `status` chỉ nhận trạng thái công khai; service
  * vẫn áp thêm `VISIBLE_STATUSES` nên client không thể nới rộng sang draft/archive.
+ *
+ * `category`/`brand` nhận slug (không phải id) để URL trên storefront thân thiện SEO;
+ * `ClientProductsService` tự resolve sang uuid trước khi giao cho `ProductsService`.
  */
 export class ClientQueryProductDto extends PaginationQueryDto {
     @ApiPropertyOptional({ enum: ProductType })
@@ -16,24 +19,24 @@ export class ClientQueryProductDto extends PaginationQueryDto {
     @IsOptional()
     productType?: ProductType;
 
-    @ApiPropertyOptional({ format: 'uuid' })
-    @IsUUID()
+    @ApiPropertyOptional({ example: 'laptop', description: 'Slug danh mục' })
+    @IsString()
     @IsOptional()
-    categoryId?: string;
+    category?: string;
 
     @ApiPropertyOptional({
         default: false,
-        description: 'true = lấy cả sản phẩm thuộc danh mục con của categoryId',
+        description: 'true = lấy cả sản phẩm thuộc danh mục con của category',
     })
     @Transform(toBoolean)
     @IsBoolean()
     @IsOptional()
     includeSubCategories?: boolean;
 
-    @ApiPropertyOptional({ format: 'uuid' })
-    @IsUUID()
+    @ApiPropertyOptional({ example: 'dell', description: 'Slug thương hiệu' })
+    @IsString()
     @IsOptional()
-    brandId?: string;
+    brand?: string;
 
     @ApiPropertyOptional({ enum: VISIBLE_STATUSES })
     @IsIn(VISIBLE_STATUSES)
