@@ -23,6 +23,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { ProductsModule } from './modules/products/products.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { SiteSettingsModule } from './modules/site-settings/site-settings.module';
 import { TiktokVideosModule } from './modules/tiktok-videos/tiktok-videos.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { UsersModule } from './modules/users/users.module';
@@ -58,6 +59,7 @@ import { RedisModule } from './redis/redis.module';
         InventoryModule,
         CarouselsModule,
         TiktokVideosModule,
+        SiteSettingsModule,
         ArticlesModule,
         OrdersModule,
         CartModule,

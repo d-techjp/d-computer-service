@@ -2,6 +2,7 @@ export enum UploadFolder {
     PRODUCTS = 'products',
     ARTICLES = 'articles',
     TIKTOK = 'tiktok',
+    SITE_SETTINGS = 'site-settings',
 }
 
 /** SVG cố tình không nằm trong allowlist — có thể nhúng script, rủi ro XSS khi hiển thị trực tiếp. */

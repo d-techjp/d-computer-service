@@ -17,8 +17,13 @@ export class UploadsController {
     constructor(private readonly uploadsService: UploadsService) {}
 
     @Post('images')
-    // Ảnh dùng cho cả sản phẩm lẫn bài viết -> chỉ cần một trong hai quyền
-    @RequirePermissions(PermissionCode.PRODUCT_MANAGE, PermissionCode.ARTICLE_MANAGE)
+    // Ảnh dùng cho sản phẩm, bài viết, hoặc logo mạng xã hội ở site-settings
+    // -> chỉ cần một trong các quyền liên quan
+    @RequirePermissions(
+        PermissionCode.PRODUCT_MANAGE,
+        PermissionCode.ARTICLE_MANAGE,
+        PermissionCode.SITE_SETTINGS_MANAGE,
+    )
     @LogActivity({ action: ActivityAction.CREATE, resource: 'upload' })
     @UseInterceptors(FileInterceptor('file', buildImageMulterOptions()))
     @ApiConsumes('multipart/form-data')
@@ -42,8 +47,13 @@ export class UploadsController {
     }
 
     @Post('images/multiple')
-    // Ảnh dùng cho cả sản phẩm lẫn bài viết -> chỉ cần một trong hai quyền
-    @RequirePermissions(PermissionCode.PRODUCT_MANAGE, PermissionCode.ARTICLE_MANAGE)
+    // Ảnh dùng cho sản phẩm, bài viết, hoặc logo mạng xã hội ở site-settings
+    // -> chỉ cần một trong các quyền liên quan
+    @RequirePermissions(
+        PermissionCode.PRODUCT_MANAGE,
+        PermissionCode.ARTICLE_MANAGE,
+        PermissionCode.SITE_SETTINGS_MANAGE,
+    )
     @LogActivity({ action: ActivityAction.CREATE, resource: 'upload' })
     @UseInterceptors(
         FilesInterceptor(
