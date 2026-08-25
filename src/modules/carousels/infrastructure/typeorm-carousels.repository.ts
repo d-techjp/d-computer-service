@@ -85,4 +85,13 @@ export class TypeOrmCarouselsRepository extends CarouselsRepository {
             }
         });
     }
+
+    async findMaxSortOrder(): Promise<number> {
+        const row = await this.repo
+            .createQueryBuilder('carousel')
+            .select('MAX(carousel.sortOrder)', 'max')
+            .getRawOne<{ max: number | string | null }>();
+
+        return row?.max === null || row?.max === undefined ? -1 : Number(row.max);
+    }
 }

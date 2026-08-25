@@ -25,11 +25,15 @@ export class CarouselsService {
     async create(dto: CreateCarouselDto): Promise<Carousel> {
         const { filters, ...rest } = dto;
         const slug = await this.resolveSlug(dto.slug ?? dto.name);
+        // Không gửi `sortOrder` -> xuống cuối. Nếu để mặc định 0 thì carousel mới
+        // luôn chen lên đầu trang chủ, ngược với kỳ vọng của người vận hành.
+        const sortOrder = dto.sortOrder ?? (await this.carouselsRepository.findMaxSortOrder()) + 1;
 
         return this.carouselsRepository.save(
             this.carouselsRepository.create({
                 ...rest,
                 slug,
+                sortOrder,
                 ...this.buildFilterColumns(filters ?? {}),
             }),
         );

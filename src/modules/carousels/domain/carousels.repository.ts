@@ -35,4 +35,7 @@ export abstract class CarouselsRepository {
 
     /** Ghi lại toàn bộ thứ tự trong MỘT transaction: đổi chỗ thì hoặc trúng cả, hoặc không đổi gì. */
     abstract updateSortOrders(positions: CarouselSortPosition[]): Promise<void>;
+
+    /** `sortOrder` lớn nhất hiện có, `-1` nếu chưa có carousel nào — dùng đẩy carousel mới xuống cuối. */
+    abstract findMaxSortOrder(): Promise<number>;
 }
