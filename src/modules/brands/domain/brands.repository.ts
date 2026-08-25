@@ -26,4 +26,7 @@ export abstract class BrandsRepository {
 
     /** Đếm bản ghi trùng slug, trừ `excludeId` — phục vụ vòng lặp sinh slug duy nhất. */
     abstract countBySlug(slug: string, excludeId?: string): Promise<number>;
+
+    /** Số sản phẩm (chưa xoá) gán vào brand này — dùng chặn xoá khi đang được dùng. */
+    abstract countProductsByBrandId(brandId: string): Promise<number>;
 }

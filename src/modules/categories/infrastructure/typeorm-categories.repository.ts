@@ -109,6 +109,10 @@ export class TypeOrmCategoriesRepository extends CategoriesRepository {
         return this.repo.count({ where: { parentId } });
     }
 
+    countProductsByCategoryId(categoryId: string): Promise<number> {
+        return this.repo.manager.count(Product, { where: { categoryId } });
+    }
+
     countActiveRoots(): Promise<number> {
         return this.repo.count({ where: { isActive: true, parentId: IsNull() } });
     }

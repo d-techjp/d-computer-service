@@ -48,7 +48,16 @@ export class BrandsService {
     }
 
     async remove(id: string): Promise<void> {
-        await this.brandsRepository.softRemove(await this.findOne(id));
+        const brand = await this.findOne(id);
+
+        const productCount = await this.brandsRepository.countProductsByBrandId(id);
+        if (productCount > 0) {
+            throw new BadRequestException(
+                `Không thể xoá thương hiệu đang gắn với ${productCount} sản phẩm — hãy chuyển sản phẩm sang thương hiệu khác trước`,
+            );
+        }
+
+        await this.brandsRepository.softRemove(brand);
     }
 
     /** Sinh slug duy nhất; nếu trùng thì nối hậu tố -2, -3, ... — quy tắc nghiệp vụ, không phải persistence. */

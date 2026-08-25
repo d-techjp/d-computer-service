@@ -82,6 +82,14 @@ export class CategoriesService {
                 'Không thể xoá danh mục đang có danh mục con — hãy xoá hoặc chuyển danh mục con trước',
             );
         }
+
+        const productCount = await this.categoriesRepository.countProductsByCategoryId(id);
+        if (productCount > 0) {
+            throw new BadRequestException(
+                `Không thể xoá danh mục đang có ${productCount} sản phẩm — hãy chuyển sản phẩm sang danh mục khác trước`,
+            );
+        }
+
         await this.categoriesRepository.softRemove(category);
     }
 

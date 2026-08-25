@@ -40,4 +40,15 @@ export class Brand extends SoftDeletableEntity {
 
     @OneToMany(() => Product, (product) => product.brand)
     products: Product[];
+
+    /**
+     * Số sản phẩm (chưa xoá) thuộc brand này. Transient: không phải cột DB,
+     * chỉ được gắn ở `GET /brands` và `GET /admin/brands` (danh sách phân
+     * trang) trong `TypeOrmBrandsRepository.search()`; không có ở chi tiết.
+     */
+    @ApiPropertyOptional({
+        default: 0,
+        description: 'Số sản phẩm chưa xoá thuộc brand này — chỉ có ở danh sách',
+    })
+    productCount?: number;
 }

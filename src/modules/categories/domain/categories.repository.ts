@@ -23,6 +23,9 @@ export abstract class CategoriesRepository {
 
     abstract countByParentId(parentId: string): Promise<number>;
 
+    /** Số sản phẩm (chưa xoá) gán trực tiếp vào category này — dùng chặn xoá khi đang được dùng. */
+    abstract countProductsByCategoryId(categoryId: string): Promise<number>;
+
     abstract countActiveRoots(): Promise<number>;
 
     /** Id các category có parent nằm trong `parentIds` — dùng dựng cây con đệ quy. */

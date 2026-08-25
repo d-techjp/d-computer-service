@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import { resolveSortColumn } from '../../../common/utils/query.util';
+import { Product } from '../../products/entities/product.entity';
 import type { QueryBrandDto } from '../dto/query-brand.dto';
 import { BrandsRepository } from '../domain/brands.repository';
 import { Brand } from '../entities/brand.entity';
@@ -42,7 +43,28 @@ export class TypeOrmBrandsRepository extends BrandsRepository {
         qb.orderBy(`brand.${sortBy}`, criteria.sortOrder).skip(criteria.skip).take(criteria.limit);
 
         const [items, total] = await qb.getManyAndCount();
+        await this.attachProductCounts(items);
         return { items, total };
+    }
+
+    /** Gắn `productCount` cho một trang brand bằng đúng MỘT truy vấn GROUP BY — xem tương tự ở `TypeOrmCategoriesRepository`. */
+    private async attachProductCounts(brands: Brand[]): Promise<void> {
+        if (brands.length === 0) return;
+        for (const brand of brands) brand.productCount = 0;
+
+        const brandIds = brands.map((brand) => brand.id);
+        const rows = await this.repo.manager
+            .createQueryBuilder(Product, 'product')
+            .select('product.brandId', 'brandId')
+            .addSelect('COUNT(*)', 'count')
+            .where('product.brandId IN (:...brandIds)', { brandIds })
+            .groupBy('product.brandId')
+            .getRawMany<{ brandId: string; count: string }>();
+
+        const countByBrandId = new Map(rows.map((row) => [row.brandId, Number(row.count)]));
+        for (const brand of brands) {
+            brand.productCount = countByBrandId.get(brand.id) ?? 0;
+        }
     }
 
     findById(id: string): Promise<Brand | null> {
@@ -61,5 +83,9 @@ export class TypeOrmBrandsRepository extends BrandsRepository {
         return this.repo.count({
             where: excludeId ? { slug, id: Not(excludeId) } : { slug },
         });
+    }
+
+    countProductsByBrandId(brandId: string): Promise<number> {
+        return this.repo.manager.count(Product, { where: { brandId } });
     }
 }

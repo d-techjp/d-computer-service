@@ -146,6 +146,16 @@ export class ProductsService {
             rest.specifications = this.resolveSpecifications(rest.specifications);
         }
 
+        // `product` được `findOne` nạp kèm relation category/brand (DETAIL_RELATIONS).
+        // Object.assign bên dưới chỉ ghi đè cột scalar categoryId/brandId — object
+        // quan hệ cũ vẫn còn trỏ tới category/brand trước đó, và TypeORM dùng nó
+        // (thay vì scalar vừa gán) để tính diff lúc save(), nên đổi danh mục/thương
+        // hiệu rồi lưu bị "revert" âm thầm về giá trị cũ. Xoá quan hệ cũ trước khi
+        // gán để save() chỉ còn scalar làm nguồn sự thật (đã kiểm chứng bằng script
+        // chạy trực tiếp qua TypeORM: không xoá thì DB vẫn giữ categoryId cũ).
+        if (rest.categoryId !== undefined) product.category = null;
+        if (rest.brandId !== undefined) product.brand = null;
+
         Object.assign(product, rest);
         await this.productsRepository.save(product);
         return this.findOne(id);
