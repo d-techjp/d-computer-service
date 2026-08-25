@@ -199,6 +199,11 @@ export class TypeOrmProductsRepository extends ProductsRepository {
         return this.repo.count({ where: excludeId ? { slug, id: Not(excludeId) } : { slug } });
     }
 
+    async bulkUpdateStatus(ids: string[], status: ProductStatus): Promise<void> {
+        if (ids.length === 0) return;
+        await this.repo.update({ id: In(ids) }, { status });
+    }
+
     refreshAggregates(productId: string): Promise<void> {
         return refreshProductAggregates(this.repo, productId);
     }

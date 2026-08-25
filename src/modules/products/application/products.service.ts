@@ -17,6 +17,7 @@ import {
     ProductStatus,
     ProductType,
 } from '../entities/product.entity';
+import { ProductBundlesService } from './product-bundles.service';
 import { ProductVariantsService } from './product-variants.service';
 
 export interface ProductImageFiles {
@@ -43,6 +44,7 @@ export class ProductsService {
         private readonly categoriesService: CategoriesService,
         private readonly brandsService: BrandsService,
         private readonly uploadsService: UploadsService,
+        private readonly bundlesService: ProductBundlesService,
     ) {}
 
     async create(dto: CreateProductDto, files?: ProductImageFiles): Promise<Product> {
@@ -150,11 +152,18 @@ export class ProductsService {
         // Object.assign bên dưới chỉ ghi đè cột scalar categoryId/brandId — object
         // quan hệ cũ vẫn còn trỏ tới category/brand trước đó, và TypeORM dùng nó
         // (thay vì scalar vừa gán) để tính diff lúc save(), nên đổi danh mục/thương
-        // hiệu rồi lưu bị "revert" âm thầm về giá trị cũ. Xoá quan hệ cũ trước khi
-        // gán để save() chỉ còn scalar làm nguồn sự thật (đã kiểm chứng bằng script
-        // chạy trực tiếp qua TypeORM: không xoá thì DB vẫn giữ categoryId cũ).
-        if (rest.categoryId !== undefined) product.category = null;
-        if (rest.brandId !== undefined) product.brand = null;
+        // hiệu rồi lưu bị "revert" âm thầm về giá trị cũ. Chỉ xoá quan hệ cũ khi
+        // giá trị THỰC SỰ đổi — xoá cả khi không đổi sẽ khiến TypeORM hiểu nhầm là
+        // "gỡ quan hệ" và ghi đè cột về NULL dù client luôn gửi lại categoryId/
+        // brandId hiện tại (đã kiểm chứng cả hai trường hợp bằng script chạy trực
+        // tiếp qua TypeORM: đổi giá trị thì cần xoá quan hệ mới lưu đúng, còn giữ
+        // nguyên giá trị mà vẫn xoá quan hệ thì cột bị ghi NULL).
+        if (rest.categoryId !== undefined && rest.categoryId !== product.categoryId) {
+            product.category = null;
+        }
+        if (rest.brandId !== undefined && rest.brandId !== product.brandId) {
+            product.brand = null;
+        }
 
         Object.assign(product, rest);
         await this.productsRepository.save(product);
@@ -162,7 +171,15 @@ export class ProductsService {
     }
 
     async remove(id: string): Promise<void> {
-        await this.productsRepository.softRemove(await this.findOne(id));
+        const product = await this.findOne(id);
+        await this.productsRepository.softRemove(product);
+        await this.bundlesService.deactivateBundlesUsingComponent(id);
+    }
+
+    /** Combo (bundle) đang dùng sản phẩm này làm thành phần — cảnh báo cho quản trị trước khi xoá. */
+    async findBundleUsage(id: string): Promise<Product[]> {
+        await this.findOne(id);
+        return this.bundlesService.findBundlesUsingComponent(id);
     }
 
     async getDescription(

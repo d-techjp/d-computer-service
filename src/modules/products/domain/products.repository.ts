@@ -61,6 +61,9 @@ export abstract class ProductsRepository {
 
     abstract countBySlug(slug: string, excludeId?: string): Promise<number>;
 
+    /** Cập nhật `status` hàng loạt — dùng khi tự tắt bán các combo mất thành phần sau khi xoá sản phẩm. */
+    abstract bulkUpdateStatus(ids: string[], status: ProductStatus): Promise<void>;
+
     /**
      * Ghi lại các cột read-model (`min_price`, `max_price`, `total_stock`,
      * `has_variants`) từ biến thể hiện có. Chạy bằng một câu UPDATE ... FROM

@@ -144,10 +144,26 @@ export class AdminProductsController {
         );
     }
 
+    @Get(':id/bundle-usage')
+    @ApiOperation({
+        summary: 'Danh sách combo đang dùng sản phẩm này làm thành phần',
+        description:
+            'Gọi trước khi xoá sản phẩm để cảnh báo: xoá xong các combo trả về ở đây sẽ ' +
+            'tự chuyển về `draft` (chưa bán) vì thiếu thành phần.',
+    })
+    findBundleUsage(@Param('id', ParseUUIDPipe) id: string): Promise<Product[]> {
+        return this.productsService.findBundleUsage(id);
+    }
+
     @Delete(':id')
     @HttpCode(HttpStatus.NO_CONTENT)
     @LogActivity({ action: ActivityAction.DELETE, resource: 'product' })
-    @ApiOperation({ summary: 'Xoá mềm sản phẩm (kéo theo toàn bộ biến thể)' })
+    @ApiOperation({
+        summary: 'Xoá mềm sản phẩm (kéo theo toàn bộ biến thể)',
+        description:
+            'Combo đang dùng sản phẩm này làm thành phần sẽ tự chuyển về `draft` (chưa bán) — ' +
+            'xem trước bằng GET /admin/products/:id/bundle-usage.',
+    })
     remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
         return this.productsService.remove(id);
     }

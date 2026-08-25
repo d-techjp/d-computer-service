@@ -5,7 +5,7 @@ import { ProductsRepository } from '../domain/products.repository';
 import type { SetBundleItemsDto } from '../dto/set-bundle-items.dto';
 import type { ProductBundleItem } from '../entities/product-bundle-item.entity';
 import { BundleInventoryPolicy, ProductVariant } from '../entities/product-variant.entity';
-import { ProductType } from '../entities/product.entity';
+import { Product, ProductStatus, ProductType } from '../entities/product.entity';
 
 const UNLIMITED_BUNDLE_STOCK = 999_999;
 
@@ -101,6 +101,30 @@ export class ProductBundlesService {
 
         await this.variantsRepository.save(bundleVariant);
         await this.productsRepository.refreshAggregates(bundleVariant.productId);
+    }
+
+    /** Combo (bundle, chưa xoá) đang dùng sản phẩm này làm thành phần — cảnh báo trước khi xoá sản phẩm. */
+    findBundlesUsingComponent(componentProductId: string): Promise<Product[]> {
+        return this.bundleItemsRepository.findBundleProductsByComponentProductId(
+            componentProductId,
+        );
+    }
+
+    /**
+     * Gọi sau khi xoá (mềm) một sản phẩm — mọi combo đang dùng nó làm thành phần
+     * không còn đủ hàng để bán, tự chuyển về `draft` ("chưa bán") để admin biết
+     * mà xử lý. `product_bundle_items` không tự dọn: component đã xoá vẫn còn
+     * trong danh sách thành phần của combo cho tới khi admin tự gỡ ở tab
+     * "Thành phần combo" (FE đánh dấu bằng `deletedAt` của `componentVariant.product`).
+     */
+    async deactivateBundlesUsingComponent(componentProductId: string): Promise<void> {
+        const bundles = await this.findBundlesUsingComponent(componentProductId);
+        const idsToDeactivate = bundles
+            .filter((bundle) => bundle.status !== ProductStatus.DRAFT)
+            .map((bundle) => bundle.id);
+        if (idsToDeactivate.length > 0) {
+            await this.productsRepository.bulkUpdateStatus(idsToDeactivate, ProductStatus.DRAFT);
+        }
     }
 
     /** Gọi sau mỗi lần kho thành phần đổi (điều chỉnh kho, đặt đơn, huỷ đơn). */
