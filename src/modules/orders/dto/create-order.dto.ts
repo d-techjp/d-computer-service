@@ -6,7 +6,9 @@ import {
     ArrayMinSize,
     IsArray,
     IsDefined,
+    IsEmail,
     IsEnum,
+    IsIn,
     IsInt,
     IsOptional,
     IsString,
@@ -16,7 +18,7 @@ import {
     MinLength,
     ValidateNested,
 } from 'class-validator';
-import { PaymentMethod } from '../enums/order.enum';
+import { ORDER_LOCALES, type OrderLocale, PaymentMethod } from '../enums/order.enum';
 
 export class OrderItemInputDto {
     @ApiProperty({
@@ -114,4 +116,19 @@ export class CreateOrderDto {
     @MaxLength(500)
     @IsOptional()
     note?: string;
+
+    @ApiPropertyOptional({
+        example: 'khach@example.com',
+        description: 'Email nhận xác nhận đơn. Checkout bắt buộc — xem `PlaceOrderDto`',
+    })
+    @Transform(toTrimmed)
+    @IsEmail({}, { message: 'Email không hợp lệ' })
+    @MaxLength(255)
+    @IsOptional()
+    customerEmail?: string;
+
+    @ApiPropertyOptional({ enum: ORDER_LOCALES, default: 'ja', description: 'Ngôn ngữ email' })
+    @IsIn(ORDER_LOCALES)
+    @IsOptional()
+    locale?: OrderLocale;
 }

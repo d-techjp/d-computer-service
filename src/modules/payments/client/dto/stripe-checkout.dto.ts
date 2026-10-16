@@ -1,32 +1,16 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
-import { CheckoutPreviewDto } from '../../../cart/dto/checkout-preview.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import { CheckoutContactDto } from '../../../cart/dto/checkout-contact.dto';
 import { OrderStatus, PaymentStatus } from '../../../orders/enums/order.enum';
-
-/** Ngôn ngữ storefront — vừa là đoạn đầu URL quay về, vừa là ngôn ngữ trang Stripe. */
-export const STOREFRONT_LOCALES = ['ja', 'vi'] as const;
-export type StorefrontLocale = (typeof STOREFRONT_LOCALES)[number];
 
 /**
  * Giống `PlaceOrderDto` nhưng không có `paymentMethod` (luôn là Stripe; khách
- * chọn thẻ hay PayPay trên trang của Stripe). Kế thừa thẳng `CheckoutPreviewDto`
- * vì cùng lý do với `PlaceOrderDto` — mapped-types không kế thừa prototype.
+ * chọn thẻ hay PayPay trên trang của Stripe).
  *
- * Nhận `locale` chứ không nhận URL quay về: cho khách tự gửi URL là mở cửa cho
- * open redirect qua chính trang thanh toán của mình.
+ * `locale` (từ `CheckoutContactDto`) quyết định URL quay về — nhận locale chứ
+ * không nhận URL: cho khách tự gửi URL là mở cửa cho open redirect qua chính
+ * trang thanh toán của mình.
  */
-export class StripeCheckoutDto extends CheckoutPreviewDto {
-    @ApiPropertyOptional({ description: 'Ghi chú cho cả đơn hàng' })
-    @IsString()
-    @MaxLength(500)
-    @IsOptional()
-    note?: string;
-
-    @ApiPropertyOptional({ enum: STOREFRONT_LOCALES, default: 'ja' })
-    @IsIn(STOREFRONT_LOCALES)
-    @IsOptional()
-    locale?: StorefrontLocale;
-}
+export class StripeCheckoutDto extends CheckoutContactDto {}
 
 export class StripeCheckoutResultDto {
     // Tên `id` (không phải `orderId`) để `ActivityLogInterceptor` ghi được resourceId

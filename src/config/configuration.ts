@@ -51,6 +51,19 @@ export const configuration = () => ({
             .filter(Boolean),
         checkoutExpiresMinutes: toInt(process.env.STRIPE_CHECKOUT_EXPIRES_MINUTES, 30),
     },
+    mail: {
+        resendApiKey: process.env.RESEND_API_KEY ?? '',
+        // Phải thuộc domain đã xác thực trên Resend, vd "D-Tech <order@d-techjp.com>"
+        from: process.env.MAIL_FROM ?? '',
+        replyTo: process.env.MAIL_REPLY_TO ?? '',
+        // Hộp thư nhận báo đơn mới — nhiều địa chỉ cách nhau bởi dấu phẩy
+        shopNotifyEmails: (process.env.SHOP_NOTIFY_EMAILS ?? '')
+            .split(',')
+            .map((email) => email.trim())
+            .filter(Boolean),
+        // Gốc trang quản trị, để email báo đơn mới có link mở thẳng đơn
+        adminUrl: (process.env.ADMIN_URL ?? '').replace(/\/+$/, ''),
+    },
     storefront: {
         // Stripe chuyển khách về đây sau khi thanh toán xong / bấm quay lại
         url: (process.env.STOREFRONT_URL ?? 'http://localhost:3000').replace(/\/+$/, ''),

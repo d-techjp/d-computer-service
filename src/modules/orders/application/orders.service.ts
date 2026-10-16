@@ -4,6 +4,7 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { randomUUID } from 'node:crypto';
 import { PaginatedResult } from '../../../common/dto/paginated-result.dto';
 import { PermissionCode } from '../../../common/enums/permission.enum';
@@ -26,12 +27,14 @@ import type { QueryOrderDto } from '../dto/query-order.dto';
 import { OrderItem } from '../entities/order-item.entity';
 import { Order } from '../entities/order.entity';
 import {
+    DEFAULT_ORDER_LOCALE,
     ORDER_STATUS_TRANSITIONS,
     OrderStatus,
     PaymentMethod,
     PaymentStatus,
     STOCK_RESERVED_STATUSES,
 } from '../enums/order.enum';
+import { ORDER_EVENTS, OrderPlacedEvent, OrderStatusChangedEvent } from '../events/order.events';
 
 const CODE_RETRY_LIMIT = 5;
 
@@ -49,6 +52,7 @@ export class OrdersService {
         private readonly ordersRepository: OrdersRepository,
         private readonly userPermissionsService: UserPermissionsService,
         private readonly bundlesService: ProductBundlesService,
+        private readonly events: EventEmitter2,
     ) {}
 
     /**
@@ -255,6 +259,8 @@ export class OrdersService {
                         total: this.round(subtotal - discount + shippingFee),
                         shippingAddress: dto.shippingAddress,
                         note: dto.note ?? null,
+                        customerEmail: dto.customerEmail ?? null,
+                        locale: dto.locale ?? DEFAULT_ORDER_LOCALE,
                         items: parentItems,
                     }),
                 );
@@ -286,6 +292,10 @@ export class OrdersService {
         // Chạy sau khi commit: bản cache chỉ phục vụ hiển thị, còn kiểm tra bán
         // vượt kho đã làm dưới khoá ở trên nên không phụ thuộc vào nó.
         await this.bundlesService.refreshBundlesContaining(touchedComponentIds);
+        // Đơn online chưa trả tiền chưa phải đơn "đã đặt" — phát khi thanh toán xong
+        if (!awaitingPayment) {
+            this.events.emit(ORDER_EVENTS.PLACED, new OrderPlacedEvent(order.id));
+        }
         return order;
     }
 
@@ -324,11 +334,16 @@ export class OrdersService {
         reason?: string,
         performedById: string | null = null,
     ): Promise<Order> {
-        const { order, restoredComponentIds } = await this.ordersRepository.runTransaction(
-            async (uow) => this.applyStatusTransition(uow, id, nextStatus, reason, performedById),
-        );
+        const { order, previousStatus, restoredComponentIds } =
+            await this.ordersRepository.runTransaction(async (uow) =>
+                this.applyStatusTransition(uow, id, nextStatus, reason, performedById),
+            );
 
         await this.bundlesService.refreshBundlesContaining(restoredComponentIds);
+        this.events.emit(
+            ORDER_EVENTS.STATUS_CHANGED,
+            new OrderStatusChangedEvent(order.id, previousStatus, order.status),
+        );
         return order;
     }
 
@@ -338,11 +353,12 @@ export class OrdersService {
         nextStatus: OrderStatus,
         reason?: string,
         performedById: string | null = null,
-    ): Promise<{ order: Order; restoredComponentIds: string[] }> {
+    ): Promise<{ order: Order; previousStatus: OrderStatus; restoredComponentIds: string[] }> {
         const order = await uow.lockOrder(id);
         if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
 
         this.assertTransitionAllowed(order.status, nextStatus);
+        const previousStatus = order.status;
 
         let restoredComponentIds: string[] = [];
         if (nextStatus === OrderStatus.CANCELLED) {
@@ -364,7 +380,7 @@ export class OrdersService {
         if (nextStatus === OrderStatus.REFUNDED) order.paymentStatus = PaymentStatus.REFUNDED;
 
         order.status = nextStatus;
-        return { order: await uow.saveOrder(order), restoredComponentIds };
+        return { order: await uow.saveOrder(order), previousStatus, restoredComponentIds };
     }
 
     /** Khách tự huỷ đơn của mình khi đơn còn ở trạng thái cho phép. */
@@ -415,8 +431,13 @@ export class OrdersService {
         id: string,
         payment: { paymentIntentId: string | null },
     ): Promise<{ outcome: OnlinePaymentOutcome; order: Order }> {
-        const { outcome, order, touchedComponentIds } = await this.ordersRepository.runTransaction(
-            async (uow) => {
+        const { outcome, order, touchedComponentIds, cancelledNow } =
+            await this.ordersRepository.runTransaction<{
+                outcome: OnlinePaymentOutcome;
+                order: Order;
+                touchedComponentIds: string[];
+                cancelledNow?: boolean;
+            }>(async (uow) => {
                 const order = await uow.lockOrder(id);
                 if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
 
@@ -453,6 +474,7 @@ export class OrdersService {
                         outcome: 'needs_refund' as const,
                         order: await uow.saveOrder(order),
                         touchedComponentIds: [],
+                        cancelledNow: true,
                     };
                 }
 
@@ -463,10 +485,21 @@ export class OrdersService {
                     order: await uow.saveOrder(order),
                     touchedComponentIds: this.componentVariantIds(order),
                 };
-            },
-        );
+            });
 
         await this.bundlesService.refreshBundlesContaining(touchedComponentIds);
+        if (outcome === 'confirmed') {
+            this.events.emit(ORDER_EVENTS.PLACED, new OrderPlacedEvent(order.id));
+        } else if (cancelledNow) {
+            this.events.emit(
+                ORDER_EVENTS.STATUS_CHANGED,
+                new OrderStatusChangedEvent(
+                    order.id,
+                    OrderStatus.AWAITING_PAYMENT,
+                    OrderStatus.CANCELLED,
+                ),
+            );
+        }
         return { outcome, order };
     }
 

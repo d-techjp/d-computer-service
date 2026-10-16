@@ -1,6 +1,7 @@
 import { ClassSerializerInterceptor, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -21,6 +22,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { MailModule } from './modules/mail/mail.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ProductsModule } from './modules/products/products.module';
@@ -50,6 +52,7 @@ import { RedisModule } from './redis/redis.module';
         }),
 
         RedisModule,
+        EventEmitterModule.forRoot(),
 
         ActivityLogsModule,
         AuthModule,
@@ -66,6 +69,7 @@ import { RedisModule } from './redis/redis.module';
         OrdersModule,
         CartModule,
         PaymentsModule,
+        MailModule,
         DashboardModule,
         UploadsModule,
         HealthModule,

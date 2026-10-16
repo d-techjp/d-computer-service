@@ -3,7 +3,14 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm
 import { SoftDeletableEntity } from '../../../common/entities/base.entity';
 import { ColumnNumericTransformer } from '../../../common/transformers/numeric.transformer';
 import { User } from '../../users/entities/user.entity';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '../enums/order.enum';
+import {
+    DEFAULT_ORDER_LOCALE,
+    ORDER_LOCALES,
+    type OrderLocale,
+    OrderStatus,
+    PaymentMethod,
+    PaymentStatus,
+} from '../enums/order.enum';
 import { OrderItem } from './order-item.entity';
 
 export interface ShippingAddress {
@@ -69,6 +76,17 @@ export class Order extends SoftDeletableEntity {
     @ApiProperty({ example: 32010000, description: 'subtotal - discount + shippingFee' })
     @Column(money)
     total: number;
+
+    @ApiPropertyOptional({
+        example: 'khach@example.com',
+        description: 'Email nhận thông báo đơn hàng. null với đơn cũ (trước khi bắt buộc email)',
+    })
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    customerEmail: string | null;
+
+    @ApiProperty({ enum: ORDER_LOCALES, default: DEFAULT_ORDER_LOCALE })
+    @Column({ type: 'varchar', length: 5, default: DEFAULT_ORDER_LOCALE })
+    locale: OrderLocale;
 
     @ApiProperty({ description: 'Địa chỉ giao hàng (snapshot tại thời điểm đặt)' })
     @Column({ type: 'jsonb' })

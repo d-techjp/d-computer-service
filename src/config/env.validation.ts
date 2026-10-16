@@ -43,6 +43,19 @@ export const envValidationSchema = Joi.object({
         .uri({ scheme: ['http', 'https'] })
         .default('http://localhost:3000'),
 
+    // Không bắt buộc lúc boot — thiếu thì không gửi email nào (log cảnh báo)
+    RESEND_API_KEY: Joi.string().allow('').default(''),
+    MAIL_FROM: Joi.string().allow('').default(''),
+    MAIL_REPLY_TO: Joi.string()
+        .email({ tlds: { allow: false } })
+        .allow('')
+        .default(''),
+    SHOP_NOTIFY_EMAILS: Joi.string().allow('').default(''),
+    ADMIN_URL: Joi.string()
+        .uri({ scheme: ['http', 'https'] })
+        .allow('')
+        .default(''),
+
     // tlds:false để chấp nhận domain nội bộ như *.local, *.internal khi chạy dev
     SEED_ADMIN_EMAIL: Joi.string()
         .email({ tlds: { allow: false } })

@@ -6,8 +6,8 @@ import { CheckoutService } from '../../cart/application/checkout.service';
 import { OrdersService } from '../../orders/application/orders.service';
 import type { Order } from '../../orders/entities/order.entity';
 import { PaymentStatus } from '../../orders/enums/order.enum';
+import type { OrderLocale } from '../../orders/enums/order.enum';
 import type {
-    StorefrontLocale,
     StripeCheckoutDto,
     StripeCheckoutResultDto,
     StripeSessionStatusDto,
@@ -59,13 +59,12 @@ export class StripeCheckoutService {
         user?: AuthenticatedUser,
     ): Promise<StripeCheckoutResultDto> {
         this.stripe.assertConfigured();
-        const { locale = 'ja', ...orderInput } = dto;
-        const order = await this.checkoutService.placeOrderAwaitingPayment(orderInput, user);
+        const order = await this.checkoutService.placeOrderAwaitingPayment(dto, user);
 
         let session: Stripe.Checkout.Session;
         try {
             session = await this.stripe.createCheckoutSession(
-                this.buildSessionParams(order, dto.cartId, locale, user),
+                this.buildSessionParams(order, dto.cartId),
                 `checkout-session-${order.id}`,
             );
         } catch (error) {
@@ -181,12 +180,8 @@ export class StripeCheckoutService {
         await this.ordersService.cancelUnpaid(orderId, reason, paymentStatus);
     }
 
-    private buildSessionParams(
-        order: Order,
-        cartId: string,
-        locale: StorefrontLocale,
-        user?: AuthenticatedUser,
-    ): Stripe.Checkout.SessionCreateParams {
+    private buildSessionParams(order: Order, cartId: string): Stripe.Checkout.SessionCreateParams {
+        const locale: OrderLocale = order.locale;
         const checkoutPath = `${this.storefrontUrl}/${locale}/checkout`;
         const metadata = { orderId: order.id, orderCode: order.code, cartId };
 
@@ -199,7 +194,8 @@ export class StripeCheckoutService {
             metadata,
             // Gắn cả lên PaymentIntent để tra từ trang Payments của Dashboard ra đơn
             payment_intent_data: { metadata, description: `Đơn hàng ${order.code}` },
-            customer_email: user?.email ?? undefined,
+            // Điền sẵn email khách đã nhập ở checkout — biên nhận Stripe cũng gửi về đây
+            customer_email: order.customerEmail ?? undefined,
             locale,
             expires_at: Math.floor(Date.now() / 1000) + this.expiresMinutes * 60,
             // `{CHECKOUT_SESSION_ID}` là placeholder Stripe tự thay — giữ nguyên ngoặc

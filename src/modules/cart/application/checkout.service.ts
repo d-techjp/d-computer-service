@@ -112,6 +112,8 @@ export class CheckoutService {
             shippingAddress: dto.shippingAddress,
             paymentMethod: dto.paymentMethod,
             note: dto.note,
+            customerEmail: dto.email,
+            locale: dto.locale,
         };
 
         const order = await this.ordersService.create(

@@ -30,6 +30,11 @@ export enum PaymentMethod {
     STRIPE = 'stripe',
 }
 
+/** Ngôn ngữ storefront — quyết định ngôn ngữ email gửi khách và trang Stripe. */
+export const ORDER_LOCALES = ['ja', 'vi'] as const;
+export type OrderLocale = (typeof ORDER_LOCALES)[number];
+export const DEFAULT_ORDER_LOCALE: OrderLocale = 'ja';
+
 /**
  * Máy trạng thái đơn hàng: từ trạng thái hiện tại chỉ được chuyển sang các trạng thái liệt kê.
  * COMPLETED / REFUNDED là trạng thái kết thúc.
