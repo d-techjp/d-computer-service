@@ -365,19 +365,6 @@ export class OrdersService {
         return this.ordersRepository.save(order);
     }
 
-    /** Doanh thu tính trên các đơn đã hoàn tất trong khoảng thời gian. */
-    async revenueSummary(
-        from: Date,
-        to: Date,
-    ): Promise<{ orderCount: number; revenue: number; averageValue: number }> {
-        const { orderCount, revenue } = await this.ordersRepository.revenueSummary(from, to);
-        return {
-            orderCount,
-            revenue,
-            averageValue: orderCount > 0 ? this.round(revenue / orderCount) : 0,
-        };
-    }
-
     /**
      * Hoàn kho đúng những dòng đã thực sự trừ kho lúc đặt: dòng con của combo,
      * và dòng cha KHÔNG có con (hàng thường hoặc combo `own_stock`). Dòng cha có

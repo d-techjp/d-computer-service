@@ -18,6 +18,7 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { CarouselsModule } from './modules/carousels/carousels.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { OrdersModule } from './modules/orders/orders.module';
@@ -63,6 +64,7 @@ import { RedisModule } from './redis/redis.module';
         ArticlesModule,
         OrdersModule,
         CartModule,
+        DashboardModule,
         UploadsModule,
         HealthModule,
     ],

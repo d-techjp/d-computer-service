@@ -11,7 +11,6 @@ import { OrdersRepository, type OrdersUnitOfWork } from '../domain/orders.reposi
 import type { QueryOrderDto } from '../dto/query-order.dto';
 import { OrderItem } from '../entities/order-item.entity';
 import { Order } from '../entities/order.entity';
-import { OrderStatus } from '../enums/order.enum';
 
 const SORTABLE_COLUMNS = ['createdAt', 'updatedAt', 'total', 'status', 'code'] as const;
 
@@ -68,18 +67,6 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
 
     save(order: Order): Promise<Order> {
         return this.repo.save(order);
-    }
-
-    async revenueSummary(from: Date, to: Date): Promise<{ orderCount: number; revenue: number }> {
-        const row = await this.repo
-            .createQueryBuilder('order')
-            .select('COUNT(*)', 'orderCount')
-            .addSelect('COALESCE(SUM(order.total), 0)', 'revenue')
-            .where('order.status = :status', { status: OrderStatus.COMPLETED })
-            .andWhere('order.createdAt BETWEEN :from AND :to', { from, to })
-            .getRawOne<{ orderCount: string; revenue: string }>();
-
-        return { orderCount: Number(row?.orderCount ?? 0), revenue: Number(row?.revenue ?? 0) };
     }
 
     runTransaction<T>(work: (unitOfWork: OrdersUnitOfWork) => Promise<T>): Promise<T> {

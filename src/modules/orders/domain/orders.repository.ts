@@ -64,7 +64,5 @@ export abstract class OrdersRepository {
 
     abstract save(order: Order): Promise<Order>;
 
-    abstract revenueSummary(from: Date, to: Date): Promise<{ orderCount: number; revenue: number }>;
-
     abstract runTransaction<T>(work: (unitOfWork: OrdersUnitOfWork) => Promise<T>): Promise<T>;
 }
