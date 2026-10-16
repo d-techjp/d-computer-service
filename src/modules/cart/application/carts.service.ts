@@ -168,6 +168,17 @@ export class CartsService {
     }
 
     /**
+     * Bản dùng cho đơn thanh toán online: giỏ được đóng muộn (khi tiền về) chứ
+     * không phải lúc đặt, nên lúc này giỏ có thể đã đóng vì một đơn khác — khi đó
+     * để nguyên, không ghi đè `orderId`.
+     */
+    async markConvertedIfActive(cartId: string, orderId: string): Promise<void> {
+        const cart = await this.cartsRepository.findById(cartId);
+        if (!cart || cart.status !== CartStatus.ACTIVE) return;
+        await this.markConverted(cart, orderId);
+    }
+
+    /**
      * Cửa duy nhất để lấy giỏ ra thao tác — mọi phép kiểm tra quyền nằm ở đây.
      *
      * Giỏ của khách vãng lai (`userId = null`) thì ai cầm `cartId` cũng dùng được,

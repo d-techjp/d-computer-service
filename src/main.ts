@@ -11,6 +11,8 @@ import { createOpenApiDocument, pickAudience } from './swagger.config';
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
         bufferLogs: true,
+        // Giữ thêm bản Buffer gốc ở `req.rawBody` — webhook Stripe xác thực chữ ký trên đó
+        rawBody: true,
     });
 
     const config = app.get(ConfigService);

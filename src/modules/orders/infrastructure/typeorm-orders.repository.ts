@@ -95,12 +95,27 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
                 items.length === 0 ? Promise.resolve([]) : manager.save(OrderItem, items),
             createOrder: (data) => manager.create(Order, data),
             saveOrder: (order) => manager.save(Order, order),
-            findOrderWithItems: (id) =>
-                manager.findOne(Order, { where: { id }, relations: { items: true } }),
+            lockOrder: (id) => this.lockOrder(manager, id),
             codeExists: (code) => manager.exists(Order, { where: { code }, withDeleted: true }),
             recordInventoryMovement: (data) =>
                 recordInventoryMovement(manager, data).then(() => undefined),
         };
+    }
+
+    /**
+     * Khoá và đọc items ở HAI câu riêng: Postgres không cho `FOR UPDATE` trên phía
+     * nullable của LEFT JOIN, mà `relations` của TypeORM luôn sinh LEFT JOIN.
+     */
+    private async lockOrder(manager: EntityManager, id: string): Promise<Order | null> {
+        const order = await manager
+            .createQueryBuilder(Order, 'order')
+            .setLock('pessimistic_write')
+            .where('order.id = :id', { id })
+            .getOne();
+        if (!order) return null;
+
+        order.items = await manager.find(OrderItem, { where: { orderId: order.id } });
+        return order;
     }
 
     /**

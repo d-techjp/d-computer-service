@@ -1,4 +1,4 @@
-import { ORDER_STATUS_TRANSITIONS, OrderStatus } from './order.enum';
+import { ORDER_STATUS_TRANSITIONS, OrderStatus, STOCK_RESERVED_STATUSES } from './order.enum';
 
 describe('ORDER_STATUS_TRANSITIONS', () => {
     it('khai báo đủ mọi trạng thái', () => {
@@ -26,5 +26,17 @@ describe('ORDER_STATUS_TRANSITIONS', () => {
         for (const status of cancellable) {
             expect(ORDER_STATUS_TRANSITIONS[status]).toContain(OrderStatus.CANCELLED);
         }
+    });
+});
+
+describe('awaiting_payment', () => {
+    it('chỉ huỷ được — sang pending là việc của webhook thanh toán, không bấm tay', () => {
+        expect(ORDER_STATUS_TRANSITIONS[OrderStatus.AWAITING_PAYMENT]).toEqual([
+            OrderStatus.CANCELLED,
+        ]);
+    });
+
+    it('không nằm trong STOCK_RESERVED_STATUSES vì chưa trừ kho', () => {
+        expect(STOCK_RESERVED_STATUSES).not.toContain(OrderStatus.AWAITING_PAYMENT);
     });
 });

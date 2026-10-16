@@ -31,6 +31,18 @@ export const envValidationSchema = Joi.object({
     R2_BUCKET_NAME: Joi.string().allow('').default(''),
     R2_PUBLIC_URL: Joi.string().allow('').default(''),
 
+    // Không bắt buộc lúc boot, giống R2 — thiếu key thì checkout chỉ còn COD và
+    // POST /checkout/stripe trả 503. Webhook secret lấy ở Dashboard > Developers >
+    // Webhooks, hoặc từ `stripe listen` khi chạy local.
+    STRIPE_SECRET_KEY: Joi.string().allow('').default(''),
+    STRIPE_WEBHOOK_SECRET: Joi.string().allow('').default(''),
+    STRIPE_PAYMENT_METHOD_TYPES: Joi.string().default('card,paypay'),
+    // Stripe chỉ nhận 30 phút -> 24 giờ
+    STRIPE_CHECKOUT_EXPIRES_MINUTES: Joi.number().integer().min(30).max(1440).default(30),
+    STOREFRONT_URL: Joi.string()
+        .uri({ scheme: ['http', 'https'] })
+        .default('http://localhost:3000'),
+
     // tlds:false để chấp nhận domain nội bộ như *.local, *.internal khi chạy dev
     SEED_ADMIN_EMAIL: Joi.string()
         .email({ tlds: { allow: false } })

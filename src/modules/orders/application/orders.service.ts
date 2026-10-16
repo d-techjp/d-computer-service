@@ -35,6 +35,14 @@ import {
 
 const CODE_RETRY_LIMIT = 5;
 
+/**
+ * - `confirmed`: vừa trừ kho, đơn sang `pending` + `paid`.
+ * - `needs_refund`: tiền về nhưng đơn không nhận được (đã huỷ/hết hạn, hoặc hết
+ *   hàng) — nơi gọi phải hoàn tiền rồi gọi `markPaymentRefunded`.
+ * - `ignored`: đã xử lý trước đó (webhook gửi lại) — không làm gì.
+ */
+export type OnlinePaymentOutcome = 'confirmed' | 'needs_refund' | 'ignored';
+
 @Injectable()
 export class OrdersService {
     constructor(
@@ -56,12 +64,27 @@ export class OrdersService {
      * `shippingFee` từng nằm trong `CreateOrderDto` nên khách tự gửi lên được và
      * tự giảm giá đơn của mình. Chỗ gọi nào có logic tính tiền (checkout, sau này
      * là coupon/phí ship) thì truyền vào đây; mặc định là không giảm, không phí.
+     *
+     * `awaitingPayment`: đơn thanh toán online — vẫn kiểm tra đủ hàng (để khách
+     * biết ngay nếu hết), nhưng CHƯA trừ kho; đơn ra đời ở `awaiting_payment` và
+     * chỉ trừ kho khi `confirmOnlinePayment` chạy. Bắt buộc đi cặp với
+     * `PaymentMethod.STRIPE`: tạo đơn Stripe mà không qua cổng thanh toán (vd
+     * `POST /orders`) sẽ ra đơn `pending` chưa ai trả tiền.
      */
     async create(
         dto: CreateOrderDto,
         userId: string | null,
         pricing: { discount: number; shippingFee: number } = { discount: 0, shippingFee: 0 },
+        options: { awaitingPayment?: boolean } = {},
     ): Promise<Order> {
+        const awaitingPayment = options.awaitingPayment ?? false;
+        if ((dto.paymentMethod === PaymentMethod.STRIPE) !== awaitingPayment) {
+            throw new BadRequestException(
+                'Thanh toán Stripe phải tạo đơn qua POST /checkout/stripe',
+            );
+        }
+        const reserveStock = !awaitingPayment;
+
         const { order, touchedComponentIds } = await this.ordersRepository.runTransaction(
             async (uow) => {
                 const requestedIds = dto.items.map((item) => item.variantId);
@@ -171,6 +194,8 @@ export class OrdersService {
                                 }),
                             );
 
+                            if (!reserveStock) continue;
+
                             const componentStockBefore = componentVariant.stock;
                             this.consumeStock(componentVariant, needed);
                             await uow.saveVariant(componentVariant);
@@ -187,20 +212,24 @@ export class OrdersService {
                         }
                     } else {
                         this.assertStockEnough(variant, input.quantity);
-                        const stockBefore = variant.stock;
-                        this.consumeStock(variant, input.quantity);
-                        if (variant.trackInventory) {
-                            stockMovements.push({
-                                variantId: variant.id,
-                                quantity: input.quantity,
-                                stockBefore,
-                                stockAfter: variant.stock,
-                            });
+                        if (reserveStock) {
+                            const stockBefore = variant.stock;
+                            this.consumeStock(variant, input.quantity);
+                            if (variant.trackInventory) {
+                                stockMovements.push({
+                                    variantId: variant.id,
+                                    quantity: input.quantity,
+                                    stockBefore,
+                                    stockAfter: variant.stock,
+                                });
+                            }
                         }
                     }
 
-                    variant.soldCount += input.quantity;
-                    await uow.saveVariant(variant);
+                    if (reserveStock) {
+                        variant.soldCount += input.quantity;
+                        await uow.saveVariant(variant);
+                    }
                 }
 
                 subtotal = this.round(subtotal);
@@ -215,7 +244,9 @@ export class OrdersService {
                     uow.createOrder({
                         code: await this.generateCode(uow),
                         userId,
-                        status: OrderStatus.PENDING,
+                        status: awaitingPayment
+                            ? OrderStatus.AWAITING_PAYMENT
+                            : OrderStatus.PENDING,
                         paymentStatus: PaymentStatus.UNPAID,
                         paymentMethod: dto.paymentMethod ?? PaymentMethod.COD,
                         subtotal,
@@ -230,7 +261,7 @@ export class OrdersService {
 
                 for (const child of childItems) child.orderId = saved.id;
                 await uow.saveOrderItems(childItems);
-                await uow.refreshProductAggregates([...touchedProductIds]);
+                if (reserveStock) await uow.refreshProductAggregates([...touchedProductIds]);
 
                 for (const movement of stockMovements) {
                     await uow.recordInventoryMovement({
@@ -308,7 +339,7 @@ export class OrdersService {
         reason?: string,
         performedById: string | null = null,
     ): Promise<{ order: Order; restoredComponentIds: string[] }> {
-        const order = await uow.findOrderWithItems(id);
+        const order = await uow.lockOrder(id);
         if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
 
         this.assertTransitionAllowed(order.status, nextStatus);
@@ -363,6 +394,182 @@ export class OrdersService {
         const order = await this.findOne(id);
         order.paymentStatus = paymentStatus;
         return this.ordersRepository.save(order);
+    }
+
+    async attachStripeSession(id: string, sessionId: string): Promise<Order> {
+        const order = await this.findOne(id);
+        order.stripeCheckoutSessionId = sessionId;
+        return this.ordersRepository.save(order);
+    }
+
+    /**
+     * Cổng thanh toán báo đã nhận tiền: trừ kho NGAY LÚC NÀY (đơn online không
+     * giữ hàng lúc đặt) rồi đưa đơn về `pending` như đơn COD. Idempotent — webhook
+     * Stripe có thể gửi lại cùng một sự kiện nhiều lần, và trang success cũng gọi
+     * vào đây để không phải chờ webhook.
+     *
+     * Không tự gọi Stripe: trả về `needs_refund` để tầng payments hoàn tiền, vì
+     * hoàn tiền là gọi mạng ra ngoài, không được nằm trong transaction đang khoá kho.
+     */
+    async confirmOnlinePayment(
+        id: string,
+        payment: { paymentIntentId: string | null },
+    ): Promise<{ outcome: OnlinePaymentOutcome; order: Order }> {
+        const { outcome, order, touchedComponentIds } = await this.ordersRepository.runTransaction(
+            async (uow) => {
+                const order = await uow.lockOrder(id);
+                if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
+
+                const unchanged = { order, touchedComponentIds: [] as string[] };
+                if (order.paymentStatus === PaymentStatus.REFUNDED) {
+                    return { outcome: 'ignored' as const, ...unchanged };
+                }
+                // `paidAt = null` nghĩa là tiền chưa từng được nhận vào đơn — đơn huỷ
+                // (hết hạn, admin huỷ, hết hàng) trước khi tiền về thì phải trả lại.
+                // Đơn đã nhận tiền rồi mới bị huỷ thì KHÔNG tự hoàn: đó là việc admin
+                // làm tay trên Stripe Dashboard.
+                if (order.status === OrderStatus.CANCELLED && order.paidAt === null) {
+                    order.paymentStatus = PaymentStatus.PAID;
+                    order.stripePaymentIntentId = payment.paymentIntentId;
+                    return {
+                        outcome: 'needs_refund' as const,
+                        order: await uow.saveOrder(order),
+                        touchedComponentIds: [],
+                    };
+                }
+                if (order.status !== OrderStatus.AWAITING_PAYMENT) {
+                    return { outcome: 'ignored' as const, ...unchanged };
+                }
+
+                order.stripePaymentIntentId = payment.paymentIntentId;
+                order.paymentStatus = PaymentStatus.PAID;
+
+                const shortage = await this.consumeStockForPaidOrder(uow, order);
+                if (shortage) {
+                    order.status = OrderStatus.CANCELLED;
+                    order.cancelReason = `Hết hàng khi thanh toán xong: ${shortage}`;
+                    order.cancelledAt = new Date();
+                    return {
+                        outcome: 'needs_refund' as const,
+                        order: await uow.saveOrder(order),
+                        touchedComponentIds: [],
+                    };
+                }
+
+                order.status = OrderStatus.PENDING;
+                order.paidAt = new Date();
+                return {
+                    outcome: 'confirmed' as const,
+                    order: await uow.saveOrder(order),
+                    touchedComponentIds: this.componentVariantIds(order),
+                };
+            },
+        );
+
+        await this.bundlesService.refreshBundlesContaining(touchedComponentIds);
+        return { outcome, order };
+    }
+
+    /**
+     * Phiên thanh toán hết hạn / thanh toán thất bại: huỷ đơn đang chờ tiền.
+     * Không hoàn kho vì đơn `awaiting_payment` chưa từng trừ kho. Đơn đã rời
+     * `awaiting_payment` (đã trả tiền, đã huỷ) thì để nguyên.
+     */
+    async cancelUnpaid(id: string, reason: string, paymentStatus: PaymentStatus): Promise<Order> {
+        return this.ordersRepository.runTransaction(async (uow) => {
+            const order = await uow.lockOrder(id);
+            if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
+            if (order.status !== OrderStatus.AWAITING_PAYMENT) return order;
+
+            order.status = OrderStatus.CANCELLED;
+            order.paymentStatus = paymentStatus;
+            order.cancelReason = reason;
+            order.cancelledAt = new Date();
+            return uow.saveOrder(order);
+        });
+    }
+
+    async markPaymentRefunded(id: string): Promise<Order> {
+        return this.ordersRepository.runTransaction(async (uow) => {
+            const order = await uow.lockOrder(id);
+            if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
+            order.paymentStatus = PaymentStatus.REFUNDED;
+            return uow.saveOrder(order);
+        });
+    }
+
+    /**
+     * Trừ kho cho đơn online vừa nhận tiền, dựa trên snapshot items đã ghi lúc
+     * đặt — cùng quy tắc với `create`/`restoreStock`: dòng cha của combo
+     * `derived_from_components` chỉ tăng `soldCount`, kho trừ ở dòng con.
+     *
+     * Kiểm tra đủ hàng cho CẢ đơn trước rồi mới trừ: thiếu một món thì không đụng
+     * gì, trả về mô tả món thiếu để huỷ đơn và hoàn tiền. Không bỏ qua quà tặng
+     * `isOptional` như lúc đặt — dòng con đã nằm trong đơn là thứ khách đã trả tiền.
+     */
+    private async consumeStockForPaidOrder(
+        uow: OrdersUnitOfWork,
+        order: Order,
+    ): Promise<string | null> {
+        const variantIds = order.items
+            .map((item) => item.variantId)
+            .filter((variantId): variantId is string => variantId !== null);
+        if (variantIds.length === 0) return 'sản phẩm trong đơn không còn tồn tại';
+
+        const parentIdsWithChildren = new Set(
+            order.items.map((item) => item.parentItemId).filter((id): id is string => id !== null),
+        );
+        const variants = await uow.lockVariants(variantIds);
+
+        const needed = new Map<string, number>();
+        for (const item of order.items) {
+            if (!item.variantId) return `"${item.productName}" không còn tồn tại`;
+            if (parentIdsWithChildren.has(item.id)) continue;
+            needed.set(item.variantId, (needed.get(item.variantId) ?? 0) + item.quantity);
+        }
+        for (const [variantId, quantity] of needed) {
+            const variant = variants.get(variantId);
+            if (!variant) return `biến thể ${variantId} không còn tồn tại`;
+            if (variant.trackInventory && variant.stock < quantity) {
+                return `"${variant.product.name} - ${variant.name}" chỉ còn ${variant.stock}, cần ${quantity}`;
+            }
+        }
+
+        const touchedProductIds = new Set<string>();
+        for (const item of order.items) {
+            const variant = variants.get(item.variantId as string) as ProductVariant;
+
+            if (!parentIdsWithChildren.has(item.id) && variant.trackInventory) {
+                const stockBefore = variant.stock;
+                this.consumeStock(variant, item.quantity);
+                await uow.recordInventoryMovement({
+                    variantId: variant.id,
+                    type: InventoryTransactionType.OUT,
+                    reasonCode: InventoryReasonCode.ORDER_SALE,
+                    quantity: item.quantity,
+                    stockBefore,
+                    stockAfter: variant.stock,
+                    referenceType: InventoryReferenceType.ORDER,
+                    referenceId: order.id,
+                    performedById: order.userId,
+                    note: order.code,
+                });
+            }
+            // Khớp `create`: `soldCount` chỉ tính ở dòng khách mua, không ở thành phần combo.
+            if (item.parentItemId === null) variant.soldCount += item.quantity;
+
+            await uow.saveVariant(variant);
+            touchedProductIds.add(variant.productId);
+        }
+
+        await uow.refreshProductAggregates([...touchedProductIds]);
+        return null;
+    }
+
+    private componentVariantIds(order: Order): string[] {
+        return order.items
+            .filter((item) => item.parentItemId !== null && item.variantId !== null)
+            .map((item) => item.variantId as string);
     }
 
     /**

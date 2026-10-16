@@ -22,6 +22,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { ProductsModule } from './modules/products/products.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { SiteSettingsModule } from './modules/site-settings/site-settings.module';
@@ -64,6 +65,7 @@ import { RedisModule } from './redis/redis.module';
         ArticlesModule,
         OrdersModule,
         CartModule,
+        PaymentsModule,
         DashboardModule,
         UploadsModule,
         HealthModule,

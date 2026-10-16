@@ -40,6 +40,21 @@ export const configuration = () => ({
         // Domain public để dựng URL trả về client — custom domain hoặc *.r2.dev đã bật public access
         publicUrl: (process.env.R2_PUBLIC_URL ?? '').replace(/\/+$/, ''),
     },
+    stripe: {
+        secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+        // Phải bật đúng các phương thức này trong Stripe Dashboard > Settings > Payment methods,
+        // nếu không Stripe từ chối tạo Checkout Session
+        paymentMethodTypes: (process.env.STRIPE_PAYMENT_METHOD_TYPES ?? 'card,paypay')
+            .split(',')
+            .map((type) => type.trim())
+            .filter(Boolean),
+        checkoutExpiresMinutes: toInt(process.env.STRIPE_CHECKOUT_EXPIRES_MINUTES, 30),
+    },
+    storefront: {
+        // Stripe chuyển khách về đây sau khi thanh toán xong / bấm quay lại
+        url: (process.env.STOREFRONT_URL ?? 'http://localhost:3000').replace(/\/+$/, ''),
+    },
     seed: {
         adminUsername: process.env.SEED_ADMIN_USERNAME ?? 'admin',
         adminEmail: process.env.SEED_ADMIN_EMAIL ?? 'admin@dcomputer.local',

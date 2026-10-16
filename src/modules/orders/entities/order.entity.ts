@@ -94,6 +94,22 @@ export class Order extends SoftDeletableEntity {
     @Column({ type: 'timestamptz', nullable: true })
     cancelledAt: Date | null;
 
+    @ApiPropertyOptional({ description: 'Thời điểm cổng thanh toán online xác nhận đã trả tiền' })
+    @Column({ type: 'timestamptz', nullable: true })
+    paidAt: Date | null;
+
+    @ApiPropertyOptional({ example: 'cs_test_a1B2c3', description: 'Stripe Checkout Session' })
+    @Index('uq_orders_stripe_checkout_session_id', { unique: true })
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    stripeCheckoutSessionId: string | null;
+
+    @ApiPropertyOptional({
+        example: 'pi_3Abc',
+        description: 'Stripe PaymentIntent — dùng để mở giao dịch trên Stripe Dashboard',
+    })
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    stripePaymentIntentId: string | null;
+
     @ApiProperty({ type: () => [OrderItem] })
     @OneToMany(() => OrderItem, (item) => item.order, { cascade: ['insert'], eager: true })
     items: OrderItem[];

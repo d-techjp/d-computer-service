@@ -17,6 +17,7 @@ import { TypeOrmCartsRepository } from './infrastructure/typeorm-carts.repositor
  * 2 application service trong cùng module).
  *
  * Phụ thuộc một chiều: cart biết products/orders, hai bên kia không biết cart.
+ * `payments` đứng trên cart (dùng `CheckoutService` để tạo đơn chờ thanh toán).
  */
 @Module({
     imports: [TypeOrmModule.forFeature([Cart, CartItem]), ProductsModule, OrdersModule],
@@ -26,6 +27,6 @@ import { TypeOrmCartsRepository } from './infrastructure/typeorm-carts.repositor
         CheckoutService,
         { provide: CartsRepository, useClass: TypeOrmCartsRepository },
     ],
-    exports: [CartsService],
+    exports: [CartsService, CheckoutService],
 })
 export class CartModule {}

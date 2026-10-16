@@ -42,7 +42,13 @@ export interface OrdersUnitOfWork {
 
     saveOrder(order: Order): Promise<Order>;
 
-    findOrderWithItems(id: string): Promise<Order | null>;
+    /**
+     * SELECT ... FOR UPDATE dòng đơn rồi nạp kèm items. Mọi thao tác đổi trạng
+     * thái đều đi qua đây: webhook Stripe xác nhận thanh toán và admin huỷ đơn có
+     * thể đến cùng lúc — không khoá thì bên lưu sau ghi đè bên trước, kho đã trừ
+     * mà đơn lại thành `cancelled`. Luôn khoá đơn TRƯỚC biến thể để không deadlock.
+     */
+    lockOrder(id: string): Promise<Order | null>;
 
     /** Kiểm tra trùng mã đơn, tính cả bản ghi đã soft-delete. */
     codeExists(code: string): Promise<boolean>;
