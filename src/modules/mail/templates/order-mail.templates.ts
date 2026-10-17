@@ -1,10 +1,5 @@
 import type { Order } from '../../orders/entities/order.entity';
-import {
-    type OrderLocale,
-    OrderStatus,
-    PaymentMethod,
-    PaymentStatus,
-} from '../../orders/enums/order.enum';
+import { OrderStatus, PaymentMethod, PaymentStatus } from '../../orders/enums/order.enum';
 
 /** Cửa hàng ở Nhật — giờ trong email theo giờ Nhật, giống dashboard. */
 const TIME_ZONE = 'Asia/Tokyo';
@@ -59,7 +54,7 @@ interface Dictionary {
     statusSubject: (code: string, title: string) => string;
 }
 
-const DICTIONARIES: Record<OrderLocale, Dictionary> = {
+const DICTIONARIES: Record<'ja' | 'vi', Dictionary> = {
     ja: {
         dateLocale: 'ja-JP',
         placedSubject: (code) => `ご注文ありがとうございます（注文番号：${code}）`,
@@ -186,9 +181,10 @@ const DICTIONARIES: Record<OrderLocale, Dictionary> = {
     },
 };
 
+/** Mail gửi khách luôn bằng tiếng Nhật, bất kể `order.locale`; từ điển `vi` chỉ dùng cho mail nội bộ. */
 /** Email xác nhận gửi khách khi đơn được nhận (COD vừa đặt / online vừa trả tiền xong). */
 export function buildOrderPlacedMail(order: Order, shop: ShopInfo): MailContent {
-    const t = DICTIONARIES[order.locale] ?? DICTIONARIES.ja;
+    const t = DICTIONARIES.ja;
     const paid = order.paymentStatus === PaymentStatus.PAID;
     const intro = paid ? t.placedIntroPaid : t.placedIntroUnpaid;
 
@@ -219,7 +215,7 @@ export function buildOrderStatusMail(
     status: OrderStatus,
     shop: ShopInfo,
 ): MailContent | null {
-    const t = DICTIONARIES[order.locale] ?? DICTIONARIES.ja;
+    const t = DICTIONARIES.ja;
     const copy = t.statuses[status];
     if (!copy) return null;
 

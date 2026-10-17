@@ -60,13 +60,15 @@ describe('order mail templates', () => {
         expect(mail.html).not.toContain('<b>Phuoc</b>');
     });
 
-    it('viết theo ngôn ngữ của đơn', () => {
-        expect(buildOrderPlacedMail(makeOrder(), shop).subject).toContain(
-            'ご注文ありがとうございます',
+    it('mail gửi khách luôn bằng tiếng Nhật dù đơn đặt ở locale vi', () => {
+        const placed = buildOrderPlacedMail(makeOrder({ locale: 'vi' }), shop);
+        expect(placed.subject).toContain('ご注文ありがとうございます');
+        const shipped = buildOrderStatusMail(
+            makeOrder({ locale: 'vi' }),
+            OrderStatus.SHIPPING,
+            shop,
         );
-        expect(buildOrderPlacedMail(makeOrder({ locale: 'vi' }), shop).subject).toContain(
-            'Xác nhận đơn hàng DH20261017-ABC123',
-        );
+        expect(shipped?.subject).toContain('商品を発送しました');
     });
 
     it('liệt kê thành phần combo dưới dòng cha, tổng tiền định dạng yên', () => {
@@ -92,8 +94,8 @@ describe('order mail templates', () => {
             OrderStatus.CANCELLED,
             shop,
         );
-        expect(mail?.text).toContain('Lý do: Hết hàng');
-        expect(mail?.text).toContain('hoàn lại toàn bộ');
+        expect(mail?.text).toContain('理由: Hết hàng');
+        expect(mail?.text).toContain('全額返金');
     });
 
     it('mail báo shop có link admin khi đã cấu hình', () => {
