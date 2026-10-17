@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { OrdersService } from '../orders/application/orders.service';
 import type { Order } from '../orders/entities/order.entity';
-import { OrderStatus, PaymentStatus } from '../orders/enums/order.enum';
+import { OrderChannel, OrderStatus, PaymentStatus } from '../orders/enums/order.enum';
 import {
     ORDER_EVENTS,
     OrderPlacedEvent,
@@ -52,7 +52,8 @@ export class OrderMailListener {
                     idempotencyKey: `order-placed-${order.id}`,
                 });
             }
-            if (this.shopNotifyEmails.length > 0) {
+            // Đơn tại quầy do chính nhân viên vừa lên — báo "có đơn mới" là thừa
+            if (this.shopNotifyEmails.length > 0 && order.channel !== OrderChannel.IN_STORE) {
                 await this.mail.send({
                     to: this.shopNotifyEmails,
                     ...buildShopNewOrderMail(order, shop, this.adminOrderUrl(order)),

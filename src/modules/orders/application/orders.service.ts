@@ -28,7 +28,10 @@ import { OrderItem } from '../entities/order-item.entity';
 import { Order } from '../entities/order.entity';
 import {
     DEFAULT_ORDER_LOCALE,
+    GATEWAY_PAYMENT_METHODS,
+    isPaymentMethodAllowed,
     ORDER_STATUS_TRANSITIONS,
+    OrderChannel,
     OrderStatus,
     PaymentMethod,
     PaymentStatus,
@@ -39,7 +42,7 @@ import { ORDER_EVENTS, OrderPlacedEvent, OrderStatusChangedEvent } from '../even
 const CODE_RETRY_LIMIT = 5;
 
 /**
- * - `confirmed`: vừa trừ kho, đơn sang `pending` + `paid`.
+ * - `confirmed`: vừa trừ kho, đơn sang `pending` + `paid` (đơn tại quầy: `completed`).
  * - `needs_refund`: tiền về nhưng đơn không nhận được (đã huỷ/hết hạn, hoặc hết
  *   hàng) — nơi gọi phải hoàn tiền rồi gọi `markPaymentRefunded`.
  * - `ignored`: đã xử lý trước đó (webhook gửi lại) — không làm gì.
@@ -71,23 +74,37 @@ export class OrdersService {
      *
      * `awaitingPayment`: đơn thanh toán online — vẫn kiểm tra đủ hàng (để khách
      * biết ngay nếu hết), nhưng CHƯA trừ kho; đơn ra đời ở `awaiting_payment` và
-     * chỉ trừ kho khi `confirmOnlinePayment` chạy. Bắt buộc đi cặp với
-     * `PaymentMethod.STRIPE`: tạo đơn Stripe mà không qua cổng thanh toán (vd
-     * `POST /orders`) sẽ ra đơn `pending` chưa ai trả tiền.
+     * chỉ trừ kho khi `confirmOnlinePayment` chạy. Bắt buộc đi cặp với các
+     * phương thức trong `GATEWAY_PAYMENT_METHODS`: tạo đơn Stripe mà không qua cổng
+     * thanh toán (vd `POST /orders`) sẽ ra đơn `pending` chưa ai trả tiền.
+     *
+     * `channel`: đơn tại quầy (`in_store`) chỉ tạo từ màn POS của admin, chỉ dùng
+     * `IN_STORE_PAYMENT_METHODS`. Đơn tại quầy không qua cổng (tiền mặt, chuyển
+     * khoản) là nhân viên đã cầm tiền và giao hàng ngay: ra đời `completed` + `paid`.
      */
     async create(
         dto: CreateOrderDto,
         userId: string | null,
         pricing: { discount: number; shippingFee: number } = { discount: 0, shippingFee: 0 },
-        options: { awaitingPayment?: boolean } = {},
+        options: { awaitingPayment?: boolean; channel?: OrderChannel } = {},
     ): Promise<Order> {
         const awaitingPayment = options.awaitingPayment ?? false;
-        if ((dto.paymentMethod === PaymentMethod.STRIPE) !== awaitingPayment) {
+        const channel = options.channel ?? OrderChannel.ONLINE;
+        const paymentMethod = dto.paymentMethod ?? PaymentMethod.COD;
+        if (GATEWAY_PAYMENT_METHODS.includes(paymentMethod) !== awaitingPayment) {
             throw new BadRequestException(
-                'Thanh toán Stripe phải tạo đơn qua POST /checkout/stripe',
+                'Thanh toán Stripe phải tạo đơn qua POST /checkout/stripe hoặc màn POS',
+            );
+        }
+        if (!isPaymentMethodAllowed(paymentMethod, channel)) {
+            throw new BadRequestException(
+                channel === OrderChannel.IN_STORE
+                    ? `Đơn tại quầy không dùng được phương thức "${paymentMethod}"`
+                    : `Phương thức "${paymentMethod}" chỉ dùng cho đơn tại quầy`,
             );
         }
         const reserveStock = !awaitingPayment;
+        const paidAtCounter = channel === OrderChannel.IN_STORE && !awaitingPayment;
 
         const { order, touchedComponentIds } = await this.ordersRepository.runTransaction(
             async (uow) => {
@@ -250,9 +267,14 @@ export class OrdersService {
                         userId,
                         status: awaitingPayment
                             ? OrderStatus.AWAITING_PAYMENT
-                            : OrderStatus.PENDING,
-                        paymentStatus: PaymentStatus.UNPAID,
-                        paymentMethod: dto.paymentMethod ?? PaymentMethod.COD,
+                            : paidAtCounter
+                              ? OrderStatus.COMPLETED
+                              : OrderStatus.PENDING,
+                        paymentStatus: paidAtCounter ? PaymentStatus.PAID : PaymentStatus.UNPAID,
+                        paidAt: paidAtCounter ? new Date() : null,
+                        completedAt: paidAtCounter ? new Date() : null,
+                        paymentMethod,
+                        channel,
                         subtotal,
                         discount,
                         shippingFee,
@@ -418,9 +440,17 @@ export class OrdersService {
         return this.ordersRepository.save(order);
     }
 
+    /** Đơn tại quầy: ghi PaymentIntent vừa đẩy xuống máy POS (thử lại thì ghi đè). */
+    async attachPaymentIntent(id: string, paymentIntentId: string): Promise<Order> {
+        const order = await this.findOne(id);
+        order.stripePaymentIntentId = paymentIntentId;
+        return this.ordersRepository.save(order);
+    }
+
     /**
      * Cổng thanh toán báo đã nhận tiền: trừ kho NGAY LÚC NÀY (đơn online không
-     * giữ hàng lúc đặt) rồi đưa đơn về `pending` như đơn COD. Idempotent — webhook
+     * giữ hàng lúc đặt) rồi đưa đơn về `pending` như đơn COD — riêng đơn tại quầy
+     * thì `completed` luôn vì khách cầm hàng về ngay. Idempotent — webhook
      * Stripe có thể gửi lại cùng một sự kiện nhiều lần, và trang success cũng gọi
      * vào đây để không phải chờ webhook.
      *
@@ -478,8 +508,13 @@ export class OrdersService {
                     };
                 }
 
-                order.status = OrderStatus.PENDING;
                 order.paidAt = new Date();
+                if (order.channel === OrderChannel.IN_STORE) {
+                    order.status = OrderStatus.COMPLETED;
+                    order.completedAt = order.paidAt;
+                } else {
+                    order.status = OrderStatus.PENDING;
+                }
                 return {
                     outcome: 'confirmed' as const,
                     order: await uow.saveOrder(order),

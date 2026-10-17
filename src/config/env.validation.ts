@@ -39,6 +39,7 @@ export const envValidationSchema = Joi.object({
     STRIPE_PAYMENT_METHOD_TYPES: Joi.string().default('card,paypay'),
     // Stripe chỉ nhận 30 phút -> 24 giờ
     STRIPE_CHECKOUT_EXPIRES_MINUTES: Joi.number().integer().min(30).max(1440).default(30),
+    STRIPE_TERMINAL_READER_ID: Joi.string().allow('').default(''),
     STOREFRONT_URL: Joi.string()
         .uri({ scheme: ['http', 'https'] })
         .default('http://localhost:3000'),

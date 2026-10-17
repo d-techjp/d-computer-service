@@ -1,5 +1,10 @@
 import type { Order } from '../../orders/entities/order.entity';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '../../orders/enums/order.enum';
+import {
+    OrderChannel,
+    OrderStatus,
+    PaymentMethod,
+    PaymentStatus,
+} from '../../orders/enums/order.enum';
 
 /** Cửa hàng ở Nhật — giờ trong email theo giờ Nhật, giống dashboard. */
 const TIME_ZONE = 'Asia/Tokyo';
@@ -33,6 +38,7 @@ interface Dictionary {
     placedHeading: string;
     placedIntroUnpaid: string;
     placedIntroPaid: string;
+    placedIntroInStore: string;
     greeting: (name: string) => string;
     orderCode: string;
     orderDate: string;
@@ -63,6 +69,8 @@ const DICTIONARIES: Record<'ja' | 'vi', Dictionary> = {
             'ご注文を受け付けました。内容を確認のうえ、担当者よりあらためてご連絡いたします。',
         placedIntroPaid:
             'お支払いを確認し、ご注文を受け付けました。発送の準備が整い次第ご連絡いたします。',
+        placedIntroInStore:
+            'ご来店いただき誠にありがとうございました。お支払いを確認いたしましたので、ご購入内容をお送りいたします。',
         greeting: (name) => `${name} 様`,
         orderCode: '注文番号',
         orderDate: '注文日時',
@@ -87,6 +95,8 @@ const DICTIONARIES: Record<'ja' | 'vi', Dictionary> = {
             [PaymentMethod.CREDIT_CARD]: 'クレジットカード',
             [PaymentMethod.E_WALLET]: '電子マネー',
             [PaymentMethod.STRIPE]: 'クレジットカード / PayPay',
+            [PaymentMethod.STRIPE_TERMINAL]: 'クレジットカード（店頭）',
+            [PaymentMethod.CASH]: '現金',
         },
         statuses: {
             [OrderStatus.CONFIRMED]: {
@@ -125,6 +135,8 @@ const DICTIONARIES: Record<'ja' | 'vi', Dictionary> = {
             'Chúng tôi đã nhận được đơn hàng của bạn. Cửa hàng sẽ liên hệ để xác nhận trong thời gian sớm nhất.',
         placedIntroPaid:
             'Chúng tôi đã nhận được thanh toán và đơn hàng của bạn. Cửa hàng sẽ thông báo khi đơn được gửi đi.',
+        placedIntroInStore:
+            'Cảm ơn bạn đã mua hàng tại cửa hàng. Đây là thông tin đơn hàng của bạn.',
         greeting: (name) => `Xin chào ${name},`,
         orderCode: 'Mã đơn hàng',
         orderDate: 'Thời gian đặt',
@@ -149,6 +161,8 @@ const DICTIONARIES: Record<'ja' | 'vi', Dictionary> = {
             [PaymentMethod.CREDIT_CARD]: 'Thẻ tín dụng',
             [PaymentMethod.E_WALLET]: 'Ví điện tử',
             [PaymentMethod.STRIPE]: 'Thẻ tín dụng / PayPay',
+            [PaymentMethod.STRIPE_TERMINAL]: 'Quẹt thẻ tại quầy',
+            [PaymentMethod.CASH]: 'Tiền mặt',
         },
         statuses: {
             [OrderStatus.CONFIRMED]: {
@@ -186,7 +200,12 @@ const DICTIONARIES: Record<'ja' | 'vi', Dictionary> = {
 export function buildOrderPlacedMail(order: Order, shop: ShopInfo): MailContent {
     const t = DICTIONARIES.ja;
     const paid = order.paymentStatus === PaymentStatus.PAID;
-    const intro = paid ? t.placedIntroPaid : t.placedIntroUnpaid;
+    const intro =
+        order.channel === OrderChannel.IN_STORE
+            ? t.placedIntroInStore
+            : paid
+              ? t.placedIntroPaid
+              : t.placedIntroUnpaid;
 
     return {
         subject: withShop(t.placedSubject(order.code), shop),
@@ -355,12 +374,17 @@ function orderDetailsHtml(order: Order, t: Dictionary): string {
                 )
                 .join('')}
         </table>
-        <h3 style="font-size:14px;margin:24px 0 4px;color:#1f2430">${t.shipTo}</h3>
+        ${
+            // Đơn tại quầy: khách nhận hàng ngay, không có địa chỉ giao
+            order.channel === OrderChannel.IN_STORE
+                ? ''
+                : `<h3 style="font-size:14px;margin:24px 0 4px;color:#1f2430">${t.shipTo}</h3>
         <p style="margin:0;font-size:14px;line-height:1.6;color:#3a4150">
             ${escapeHtml(address.fullName)}<br>
             ${escapeHtml(address.phone)}<br>
             ${escapeHtml(formatAddress(order))}
-        </p>
+        </p>`
+        }
         ${
             order.note
                 ? `<h3 style="font-size:14px;margin:24px 0 4px;color:#1f2430">${t.note}</h3>
@@ -391,13 +415,15 @@ function orderDetailsText(order: Order, t: Dictionary): string {
         `${t.shipping}: ${formatYen(order.shippingFee)}`,
         `${t.total}: ${formatYen(order.total)}`,
     );
-    lines.push(
-        '',
-        `[${t.shipTo}]`,
-        order.shippingAddress.fullName,
-        order.shippingAddress.phone,
-        formatAddress(order),
-    );
+    if (order.channel !== OrderChannel.IN_STORE) {
+        lines.push(
+            '',
+            `[${t.shipTo}]`,
+            order.shippingAddress.fullName,
+            order.shippingAddress.phone,
+            formatAddress(order),
+        );
+    }
     if (order.note) lines.push('', `[${t.note}]`, order.note);
     return lines.join('\n');
 }

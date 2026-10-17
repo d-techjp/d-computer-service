@@ -6,6 +6,7 @@ import { User } from '../../users/entities/user.entity';
 import {
     DEFAULT_ORDER_LOCALE,
     ORDER_LOCALES,
+    OrderChannel,
     type OrderLocale,
     OrderStatus,
     PaymentMethod,
@@ -61,6 +62,10 @@ export class Order extends SoftDeletableEntity {
     @Column({ type: 'enum', enum: PaymentMethod, default: PaymentMethod.COD })
     paymentMethod: PaymentMethod;
 
+    @ApiProperty({ enum: OrderChannel, default: OrderChannel.ONLINE })
+    @Column({ type: 'enum', enum: OrderChannel, default: OrderChannel.ONLINE })
+    channel: OrderChannel;
+
     @ApiProperty({ example: 31980000, description: 'Tổng tiền hàng trước giảm giá và phí ship' })
     @Column(money)
     subtotal: number;
@@ -88,7 +93,11 @@ export class Order extends SoftDeletableEntity {
     @Column({ type: 'varchar', length: 5, default: DEFAULT_ORDER_LOCALE })
     locale: OrderLocale;
 
-    @ApiProperty({ description: 'Địa chỉ giao hàng (snapshot tại thời điểm đặt)' })
+    @ApiProperty({
+        description:
+            'Địa chỉ giao hàng (snapshot tại thời điểm đặt). Đơn tại quầy chỉ có tên/điện thoại, ' +
+            'các trường địa chỉ để rỗng',
+    })
     @Column({ type: 'jsonb' })
     shippingAddress: ShippingAddress;
 

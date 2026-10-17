@@ -98,4 +98,30 @@ export class TypeOrmUsersRepository extends UsersRepository {
     existsByEmail(email: string): Promise<boolean> {
         return this.repo.exists({ where: { email: email.toLowerCase() }, withDeleted: true });
     }
+
+    searchByPhoneDigits(digits: string, roleCode: string, limit: number): Promise<User[]> {
+        return this.phoneQuery(roleCode)
+            .andWhere(`${PHONE_DIGITS} LIKE :pattern`, { pattern: `%${digits}%` })
+            .orderBy('user.updatedAt', 'DESC')
+            .take(limit)
+            .getMany();
+    }
+
+    findByPhoneDigits(digits: string, roleCode: string): Promise<User | null> {
+        return this.phoneQuery(roleCode)
+            .andWhere(`${PHONE_DIGITS} = :digits`, { digits })
+            .orderBy('user.createdAt', 'ASC')
+            .getOne();
+    }
+
+    private phoneQuery(roleCode: string) {
+        return this.repo
+            .createQueryBuilder('user')
+            .leftJoinAndSelect('user.role', 'role')
+            .where('role.code = :roleCode', { roleCode })
+            .andWhere('user.phone IS NOT NULL');
+    }
 }
+
+/** Số điện thoại chỉ còn chữ số — khách nhập kiểu nào cũng so được với nhau. */
+const PHONE_DIGITS = `regexp_replace("user"."phone", '[^0-9]', '', 'g')`;

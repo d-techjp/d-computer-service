@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import { PaginatedResult } from '../../../common/dto/paginated-result.dto';
 import { RoleCode } from '../../../common/enums/role.enum';
@@ -114,6 +115,62 @@ export class UsersService {
         await this.usersRepository.markLoggedIn(id);
     }
 
+    /** Gợi ý khách theo số điện thoại (màn bán tại quầy). Dưới 3 chữ số thì không tìm. */
+    async searchCustomersByPhone(phone: string, limit = 10): Promise<User[]> {
+        const digits = toPhoneDigits(phone);
+        if (digits.length < 3) return [];
+        return this.usersRepository.searchByPhoneDigits(digits, RoleCode.CUSTOMER, limit);
+    }
+
+    async findCustomer(id: string): Promise<User> {
+        const user = await this.findOne(id);
+        if (user.role?.code !== (RoleCode.CUSTOMER as string)) {
+            throw new NotFoundException(`Không tìm thấy khách hàng với id ${id}`);
+        }
+        return user;
+    }
+
+    /**
+     * Khách mua tại quầy có số điện thoại: dùng lại tài khoản khách trùng số, chưa
+     * có thì tạo mới. Tài khoản tạo ở đây mang mật khẩu ngẫu nhiên không ai biết —
+     * khách muốn đăng nhập web thì dùng "quên mật khẩu" (cần có email).
+     *
+     * Email đã thuộc tài khoản khác thì KHÔNG gắn vào khách mới (email là duy
+     * nhất); đơn vẫn giữ email riêng để gửi biên nhận.
+     */
+    async findOrCreateCustomerByPhone(input: {
+        phone: string;
+        fullName?: string;
+        email?: string;
+    }): Promise<{ user: User; created: boolean }> {
+        const digits = toPhoneDigits(input.phone);
+        const existing = await this.usersRepository.findByPhoneDigits(digits, RoleCode.CUSTOMER);
+        if (existing) return { user: existing, created: false };
+
+        const email = input.email?.toLowerCase();
+        const emailFree = email ? !(await this.usersRepository.existsByEmail(email)) : false;
+        const user = await this.create({
+            username: await this.generateCustomerUsername(digits),
+            password: randomBytes(24).toString('base64url'),
+            fullName: input.fullName?.trim() || input.phone,
+            phone: input.phone.trim(),
+            email: emailFree ? email : undefined,
+            roleCode: RoleCode.CUSTOMER,
+        });
+        return { user, created: true };
+    }
+
+    /** `kh<số điện thoại>`, trùng (vd tài khoản cũ đã xoá) thì thêm hậu tố ngẫu nhiên. */
+    private async generateCustomerUsername(digits: string): Promise<string> {
+        const base = `kh${digits}`.slice(0, 40);
+        if (!(await this.usersRepository.existsByUsername(base))) return base;
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            const candidate = `${base}_${randomBytes(3).toString('hex')}`;
+            if (!(await this.usersRepository.existsByUsername(candidate))) return candidate;
+        }
+        throw new ConflictException('Không sinh được username cho khách mới, vui lòng thử lại');
+    }
+
     private async assertUsernameAvailable(username: string): Promise<void> {
         if (await this.usersRepository.existsByUsername(username)) {
             throw new ConflictException(`Username ${username} đã được sử dụng`);
@@ -125,4 +182,8 @@ export class UsersService {
             throw new ConflictException(`Email ${email} đã được sử dụng`);
         }
     }
+}
+
+function toPhoneDigits(phone: string): string {
+    return phone.replace(/\D/g, '');
 }

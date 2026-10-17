@@ -1,5 +1,10 @@
 import type { Order } from '../../orders/entities/order.entity';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '../../orders/enums/order.enum';
+import {
+    OrderChannel,
+    OrderStatus,
+    PaymentMethod,
+    PaymentStatus,
+} from '../../orders/enums/order.enum';
 import {
     buildOrderPlacedMail,
     buildOrderStatusMail,
@@ -15,6 +20,7 @@ function makeOrder(overrides: Partial<Order> = {}): Order {
         code: 'DH20261017-ABC123',
         locale: 'ja',
         customerEmail: 'khach@example.com',
+        channel: OrderChannel.ONLINE,
         status: OrderStatus.PENDING,
         paymentStatus: PaymentStatus.UNPAID,
         paymentMethod: PaymentMethod.COD,
@@ -69,6 +75,21 @@ describe('order mail templates', () => {
             shop,
         );
         expect(shipped?.subject).toContain('商品を発送しました');
+    });
+
+    it('đơn tại quầy: không có khối địa chỉ giao hàng, lời chào theo kiểu tại cửa hàng', () => {
+        const mail = buildOrderPlacedMail(
+            makeOrder({
+                channel: OrderChannel.IN_STORE,
+                paymentMethod: PaymentMethod.STRIPE_TERMINAL,
+                paymentStatus: PaymentStatus.PAID,
+            }),
+            shop,
+        );
+        expect(mail.text).toContain('ご来店いただき');
+        expect(mail.text).not.toContain('お届け先');
+        expect(mail.html).not.toContain('お届け先');
+        expect(mail.text).toContain('クレジットカード（店頭）');
     });
 
     it('liệt kê thành phần combo dưới dòng cha, tổng tiền định dạng yên', () => {

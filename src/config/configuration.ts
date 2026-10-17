@@ -50,6 +50,8 @@ export const configuration = () => ({
             .map((type) => type.trim())
             .filter(Boolean),
         checkoutExpiresMinutes: toInt(process.env.STRIPE_CHECKOUT_EXPIRES_MINUTES, 30),
+        // Máy POS mặc định của màn bán tại quầy (`tmr_...`). Để trống thì nhân viên chọn máy.
+        terminalReaderId: process.env.STRIPE_TERMINAL_READER_ID ?? '',
     },
     mail: {
         resendApiKey: process.env.RESEND_API_KEY ?? '',

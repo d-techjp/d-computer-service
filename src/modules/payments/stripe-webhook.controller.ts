@@ -12,6 +12,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request } from 'express';
 import Stripe from 'stripe';
 import { Public } from '../../common/decorators/public.decorator';
+import { PosTerminalService } from './application/pos-terminal.service';
 import { StripeCheckoutService } from './application/stripe-checkout.service';
 import { StripeGateway } from './infrastructure/stripe.gateway';
 
@@ -22,7 +23,7 @@ import { StripeGateway } from './infrastructure/stripe.gateway';
  *
  * Đăng ký trên Dashboard các sự kiện: checkout.session.completed,
  * checkout.session.expired, checkout.session.async_payment_succeeded,
- * checkout.session.async_payment_failed.
+ * checkout.session.async_payment_failed, và payment_intent.succeeded (máy POS tại quầy).
  *
  * Lỗi xử lý để ném ra (5xx) — Stripe sẽ gửi lại, mọi bước đều idempotent.
  */
@@ -33,6 +34,7 @@ export class StripeWebhookController {
     constructor(
         private readonly stripe: StripeGateway,
         private readonly stripeCheckoutService: StripeCheckoutService,
+        private readonly posTerminalService: PosTerminalService,
     ) {}
 
     @Post('webhook')
@@ -55,7 +57,9 @@ export class StripeWebhookController {
             throw error;
         }
 
-        await this.stripeCheckoutService.handleWebhookEvent(event);
+        if (!(await this.posTerminalService.handleWebhookEvent(event))) {
+            await this.stripeCheckoutService.handleWebhookEvent(event);
+        }
         return { received: true };
     }
 }
