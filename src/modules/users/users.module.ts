@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TokenVersionModule } from '../auth/token-version/token-version.module';
+import { OrdersModule } from '../orders/orders.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { AdminUsersController } from './admin/admin-users.controller';
 import { UsersService } from './application/users.service';
@@ -10,7 +11,7 @@ import { User } from './entities/user.entity';
 import { TypeOrmUsersRepository } from './infrastructure/typeorm-users.repository';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([User]), RbacModule, TokenVersionModule],
+    imports: [TypeOrmModule.forFeature([User]), RbacModule, TokenVersionModule, OrdersModule],
     controllers: [ClientUsersController, AdminUsersController],
     providers: [UsersService, { provide: UsersRepository, useClass: TypeOrmUsersRepository }],
     exports: [UsersService],

@@ -61,6 +61,16 @@ export interface OrdersUnitOfWork {
     recordInventoryMovement(data: RecordMovementInput): Promise<void>;
 }
 
+/** Số liệu đơn của một khách — xem `OrdersService.customerStats` về cách đếm. */
+export interface CustomerOrderStats {
+    orderCount: number;
+    completedCount: number;
+    cancelledCount: number;
+    totalSpent: number;
+    firstOrderAt: Date | null;
+    lastOrderAt: Date | null;
+}
+
 export abstract class OrdersRepository {
     abstract search(criteria: QueryOrderDto): Promise<RepositoryPage<Order>>;
 
@@ -69,6 +79,8 @@ export abstract class OrdersRepository {
     abstract findByCode(code: string): Promise<Order | null>;
 
     abstract save(order: Order): Promise<Order>;
+
+    abstract customerStats(userId: string): Promise<CustomerOrderStats>;
 
     abstract runTransaction<T>(work: (unitOfWork: OrdersUnitOfWork) => Promise<T>): Promise<T>;
 }

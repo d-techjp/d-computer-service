@@ -69,6 +69,14 @@ export class SiteSettings extends BaseEntity {
     @Column({ type: 'varchar', length: 500, default: '' })
     address: string;
 
+    @ApiProperty({
+        example: 'T1234567890123',
+        description:
+            'Số đăng ký 適格請求書発行事業者 (インボイス) — in trên bill. Rỗng = chưa đăng ký, không in',
+    })
+    @Column({ type: 'varchar', length: 14, default: '' })
+    invoiceRegistrationNumber: string;
+
     @ApiProperty({ type: () => [SocialLink] })
     @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
     socialLinks: SocialLink[];

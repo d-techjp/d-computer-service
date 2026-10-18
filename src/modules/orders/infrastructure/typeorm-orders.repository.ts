@@ -1,13 +1,25 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, type EntityManager, In, Repository } from 'typeorm';
+import {
+    Brackets,
+    DataSource,
+    type EntityManager,
+    In,
+    Repository,
+    type SelectQueryBuilder,
+} from 'typeorm';
 import type { RepositoryPage } from '../../../common/interfaces/repository-page.interface';
 import { resolveSortColumn } from '../../../common/utils/query.util';
 import { recordInventoryMovement } from '../../inventory/infrastructure/record-inventory-movement';
 import { ProductBundleItem } from '../../products/entities/product-bundle-item.entity';
 import { ProductVariant } from '../../products/entities/product-variant.entity';
 import { refreshProductAggregates } from '../../products/infrastructure/product-aggregates';
-import { OrdersRepository, type OrdersUnitOfWork } from '../domain/orders.repository';
+import {
+    type CustomerOrderStats,
+    OrdersRepository,
+    type OrdersUnitOfWork,
+} from '../domain/orders.repository';
+import { OrderStatus } from '../enums/order.enum';
 import type { QueryOrderDto } from '../dto/query-order.dto';
 import { OrderItem } from '../entities/order-item.entity';
 import { Order } from '../entities/order.entity';
@@ -30,9 +42,7 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
             .leftJoin('order.user', 'user')
             .addSelect(['user.id', 'user.email', 'user.fullName']);
 
-        if (criteria.search) {
-            qb.andWhere('order.code ILIKE :search', { search: `%${criteria.search}%` });
-        }
+        if (criteria.search) this.applySearch(qb, criteria.search);
         if (criteria.userId) qb.andWhere('order.userId = :userId', { userId: criteria.userId });
         if (criteria.status) qb.andWhere('order.status = :status', { status: criteria.status });
         if (criteria.paymentStatus) {
@@ -55,6 +65,71 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
 
         const [items, total] = await qb.getManyAndCount();
         return { items, total };
+    }
+
+    /**
+     * Một ô tìm cho cả mã đơn, tên khách (theo đơn và theo tài khoản), email và
+     * số điện thoại. Số điện thoại so theo chữ số, bỏ số 0 đầu / mã nước, để
+     * `0373847371` tìm ra cả đơn ghi `+84373847371` lẫn `037-3847-371`.
+     */
+    private applySearch(qb: SelectQueryBuilder<Order>, raw: string): void {
+        const search = `%${raw.trim()}%`;
+        const phoneCandidates = phoneSearchCandidates(raw);
+
+        qb.andWhere(
+            new Brackets((where) => {
+                where
+                    .where('order.code ILIKE :search', { search })
+                    .orWhere(`order.shippingAddress ->> 'fullName' ILIKE :search`, { search })
+                    .orWhere('order.customerEmail ILIKE :search', { search })
+                    .orWhere('user.fullName ILIKE :search', { search });
+                phoneCandidates.forEach((digits, index) => {
+                    where.orWhere(
+                        `regexp_replace(order.shippingAddress ->> 'phone', '[^0-9]', '', 'g') LIKE :phone${index}`,
+                        { [`phone${index}`]: `%${digits}%` },
+                    );
+                });
+            }),
+        );
+    }
+
+    async customerStats(userId: string): Promise<CustomerOrderStats> {
+        // Một lượt quét với FILTER thay vì nhiều query. `awaiting_payment` là đơn
+        // online chưa trả tiền (có thể không bao giờ trả) — không tính là đã đặt.
+        const row = await this.repo
+            .createQueryBuilder('order')
+            .select(`COUNT(*) FILTER (WHERE order.status <> :awaiting)`, 'orderCount')
+            .addSelect(`COUNT(*) FILTER (WHERE order.status = :completed)`, 'completedCount')
+            .addSelect(`COUNT(*) FILTER (WHERE order.status = :cancelled)`, 'cancelledCount')
+            .addSelect(
+                `COALESCE(SUM(order.total) FILTER (WHERE order.status = :completed), 0)`,
+                'totalSpent',
+            )
+            .addSelect(
+                `MIN(order.createdAt) FILTER (WHERE order.status <> :awaiting)`,
+                'firstOrderAt',
+            )
+            .addSelect(
+                `MAX(order.createdAt) FILTER (WHERE order.status <> :awaiting)`,
+                'lastOrderAt',
+            )
+            .where('order.userId = :userId', { userId })
+            .setParameters({
+                awaiting: OrderStatus.AWAITING_PAYMENT,
+                completed: OrderStatus.COMPLETED,
+                cancelled: OrderStatus.CANCELLED,
+            })
+            .getRawOne<Record<string, string | Date | null>>();
+
+        // COUNT trả bigint, SUM(numeric) trả numeric — pg đưa về chuỗi
+        return {
+            orderCount: Number(row?.orderCount ?? 0),
+            completedCount: Number(row?.completedCount ?? 0),
+            cancelledCount: Number(row?.cancelledCount ?? 0),
+            totalSpent: Number(row?.totalSpent ?? 0),
+            firstOrderAt: row?.firstOrderAt ? new Date(row.firstOrderAt) : null,
+            lastOrderAt: row?.lastOrderAt ? new Date(row.lastOrderAt) : null,
+        };
     }
 
     findById(id: string): Promise<Order | null> {
@@ -141,4 +216,17 @@ export class TypeOrmOrdersRepository extends OrdersRepository {
 
         return new Map(variants.map((variant) => [variant.id, variant]));
     }
+}
+
+/**
+ * Dãy số dùng để so số điện thoại: bỏ số 0 đầu (`0373…` -> `373…`), và nếu
+ * người dùng gõ kèm mã nước Việt Nam / Nhật (`84…`, `81…`) thì thử thêm bản bỏ
+ * mã nước. Dưới 3 chữ số thì không tìm theo số — dễ khớp nhầm mã đơn, số tiền.
+ */
+function phoneSearchCandidates(raw: string): string[] {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length < 3) return [];
+    const candidates = new Set([digits.replace(/^0+/, '') || digits]);
+    if (/^(84|81)/.test(digits) && digits.length >= 11) candidates.add(digits.slice(2));
+    return [...candidates];
 }

@@ -21,7 +21,11 @@ import {
 import { ProductStatus } from '../../products/entities/product.entity';
 import { ProductBundlesService } from '../../products/application/product-bundles.service';
 import { UserPermissionsService } from '../../rbac/user-permissions.service';
-import { OrdersRepository, type OrdersUnitOfWork } from '../domain/orders.repository';
+import {
+    type CustomerOrderStats,
+    OrdersRepository,
+    type OrdersUnitOfWork,
+} from '../domain/orders.repository';
 import type { CreateOrderDto } from '../dto/create-order.dto';
 import type { QueryOrderDto } from '../dto/query-order.dto';
 import { OrderItem } from '../entities/order-item.entity';
@@ -330,6 +334,15 @@ export class OrdersService {
         const order = await this.ordersRepository.findById(id);
         if (!order) throw new NotFoundException(`Không tìm thấy đơn hàng với id ${id}`);
         return order;
+    }
+
+    /**
+     * Số liệu mua hàng của một khách, tính lúc xem chi tiết (không lưu sẵn trên
+     * user). Cùng quy ước với dashboard: chi tiêu chỉ tính đơn `completed` — đơn
+     * đang giao có thể còn huỷ, đơn hoàn tiền thì tiền đã trả lại.
+     */
+    customerStats(userId: string): Promise<CustomerOrderStats> {
+        return this.ordersRepository.customerStats(userId);
     }
 
     async findByCode(code: string): Promise<Order> {

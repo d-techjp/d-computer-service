@@ -4,6 +4,7 @@ import {
     IsArray,
     IsOptional,
     IsString,
+    Matches,
     MaxLength,
     MinLength,
     ValidateNested,
@@ -42,6 +43,17 @@ export class UpdateSiteSettingsDto {
     @MaxLength(500)
     @IsOptional()
     address?: string;
+
+    @ApiPropertyOptional({
+        example: 'T1234567890123',
+        description: 'Chữ T + 13 chữ số. Gửi chuỗi rỗng để xoá',
+    })
+    @Transform(toTrimmed)
+    @Matches(/^(T\d{13})?$/, {
+        message: 'Số đăng ký インボイス phải là chữ T và 13 chữ số, vd T1234567890123',
+    })
+    @IsOptional()
+    invoiceRegistrationNumber?: string;
 
     @ApiPropertyOptional({ type: [SocialLinkDto] })
     @IsArray()

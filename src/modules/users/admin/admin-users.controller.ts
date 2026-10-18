@@ -11,23 +11,28 @@ import {
     Put,
     Query,
 } from '@nestjs/common';
-import { ApiOperation } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation } from '@nestjs/swagger';
 import { LogActivity } from '../../../common/decorators/activity-log.decorator';
 import { AdminController } from '../../../common/decorators/admin-controller.decorator';
 import { RequirePermissions } from '../../../common/decorators/require-permissions.decorator';
 import { PaginatedResult } from '../../../common/dto/paginated-result.dto';
 import { PermissionCode } from '../../../common/enums/permission.enum';
 import { ActivityAction } from '../../activity-logs/enums/activity-action.enum';
+import { OrdersService } from '../../orders/application/orders.service';
 import { AssignRoleDto } from '../../rbac/dto/assign-role.dto';
 import { UsersService } from '../application/users.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { QueryUserDto } from '../dto/query-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User } from '../entities/user.entity';
+import { CustomerOrderStatsDto } from './dto/customer-order-stats.dto';
 
 @AdminController('users', 'Users')
 export class AdminUsersController {
-    constructor(private readonly usersService: UsersService) {}
+    constructor(
+        private readonly usersService: UsersService,
+        private readonly ordersService: OrdersService,
+    ) {}
 
     @Post()
     @RequirePermissions(PermissionCode.USER_ADMINISTRATOR_MANAGE)
@@ -49,6 +54,23 @@ export class AdminUsersController {
     @ApiOperation({ summary: 'Danh sách user có phân trang / lọc / tìm kiếm' })
     findAll(@Query() query: QueryUserDto): Promise<PaginatedResult<User>> {
         return this.usersService.findAll(query);
+    }
+
+    @Get(':id/order-stats')
+    @RequirePermissions(PermissionCode.USER_CUSTOMER_MANAGE)
+    @ApiOkResponse({ type: CustomerOrderStatsDto })
+    @ApiOperation({
+        summary: 'Số liệu mua hàng của khách — tính khi mở chi tiết',
+        description: 'Chi tiêu chỉ tính đơn hoàn tất, cùng quy ước với dashboard',
+    })
+    async orderStats(@Param('id', ParseUUIDPipe) id: string): Promise<CustomerOrderStatsDto> {
+        await this.usersService.findOne(id);
+        const stats = await this.ordersService.customerStats(id);
+        return {
+            ...stats,
+            averageOrderValue:
+                stats.completedCount > 0 ? Math.round(stats.totalSpent / stats.completedCount) : 0,
+        };
     }
 
     @Get(':id')
