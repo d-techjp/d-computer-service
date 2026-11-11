@@ -37,7 +37,7 @@ export const configuration = () => ({
         accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
         bucket: process.env.R2_BUCKET_NAME ?? '',
-        // Domain public để dựng URL trả về client — custom domain hoặc *.r2.dev đã bật public access
+        // Domain public để dựng URL trả về client — custom domain của bucket (prod: cdn.d-techjp.com)
         publicUrl: (process.env.R2_PUBLIC_URL ?? '').replace(/\/+$/, ''),
     },
     stripe: {

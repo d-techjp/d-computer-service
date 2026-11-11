@@ -274,16 +274,16 @@ Cả hai yêu cầu role `admin`/`staff`, tối đa **5MB/ảnh**, chỉ nhận 
 curl -X POST "http://localhost:3000/api/v1/uploads/images?folder=products" \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@laptop-dell.jpg;type=image/jpeg"
-# -> { "url": "https://pub-xxxx.r2.dev/products/<uuid>.jpg", "key": "products/<uuid>.jpg", ... }
+# -> { "url": "https://cdn.d-techjp.com/products/<uuid>.jpg", "key": "products/<uuid>.jpg", ... }
 
 curl -X POST http://localhost:3000/api/v1/products \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "...", "sku": "...", "price": 100000, "thumbnail": "https://pub-xxxx.r2.dev/products/<uuid>.jpg"}'
+  -d '{"name": "...", "sku": "...", "price": 100000, "thumbnail": "https://cdn.d-techjp.com/products/<uuid>.jpg"}'
 ```
 
 **Cấu hình** (`.env`, xem thêm `.env.example`): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-`R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` (domain public — bật Public Access
-cho bucket rồi lấy `*.r2.dev`, hoặc gắn custom domain cho production). Các biến này **không
+`R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` (custom domain gắn vào bucket,
+ví dụ `https://cdn.d-techjp.com`; không dùng `*.r2.dev` cho production). Các biến này **không
 bắt buộc lúc app khởi động** — cố tình để vậy nên môi trường dev/test không đụng tới ảnh vẫn
 chạy bình thường. Khi thật sự gọi endpoint upload mà thiếu cấu hình, API trả `503` với thông
 báo rõ ràng thay vì app crash lúc boot hoặc lỗi khó hiểu từ AWS SDK.
