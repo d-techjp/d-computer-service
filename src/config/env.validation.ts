@@ -46,6 +46,9 @@ export const envValidationSchema = Joi.object({
 
     // Không bắt buộc lúc boot — thiếu thì không gửi email nào (log cảnh báo)
     RESEND_API_KEY: Joi.string().allow('').default(''),
+    // Để trống thì các endpoint tương ứng trả 503 (fail-closed), app vẫn khởi động được
+    TURNSTILE_SECRET_KEY: Joi.string().allow('').default(''),
+    GOOGLE_CLIENT_ID: Joi.string().allow('').default(''),
     MAIL_FROM: Joi.string().allow('').default(''),
     MAIL_REPLY_TO: Joi.string()
         .email({ tlds: { allow: false } })

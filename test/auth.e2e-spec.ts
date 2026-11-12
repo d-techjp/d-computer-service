@@ -1,8 +1,14 @@
-import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+    BadRequestException,
+    INestApplication,
+    ValidationPipe,
+    VersioningType,
+} from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { TurnstileGateway } from '../src/modules/auth/infrastructure/turnstile.gateway';
 
 /** `response.body` của supertest là `any` — ép về envelope chuẩn của API tại một chỗ. */
 const bodyData = <T>(response: request.Response): T => (response.body as { data: T }).data;
@@ -20,6 +26,7 @@ describe('Auth token version (e2e)', () => {
     const credentials = {
         username: process.env.SEED_ADMIN_USERNAME ?? 'admin',
         password: process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123456',
+        captchaToken: 'e2e-captcha',
     };
 
     const login = async (): Promise<AuthPayload> => {
@@ -33,7 +40,14 @@ describe('Auth token version (e2e)', () => {
     beforeAll(async () => {
         const moduleRef: TestingModule = await Test.createTestingModule({
             imports: [AppModule],
-        }).compile();
+        })
+            // Không gọi Cloudflare thật trong test; vẫn bắt buộc có token để thấy guard chạy
+            .overrideProvider(TurnstileGateway)
+            .useValue({
+                verify: (token?: string) =>
+                    token ? Promise.resolve() : Promise.reject(new BadRequestException()),
+            })
+            .compile();
 
         app = moduleRef.createNestApplication();
         app.setGlobalPrefix('api');
@@ -50,6 +64,14 @@ describe('Auth token version (e2e)', () => {
 
     it('từ chối request không có token', async () => {
         await request(app.getHttpServer()).get('/api/v1/users').expect(401);
+    });
+
+    it('từ chối đăng nhập không kèm captchaToken', async () => {
+        const { captchaToken: _captchaToken, ...withoutCaptcha } = credentials;
+        await request(app.getHttpServer())
+            .post('/api/v1/auth/login')
+            .send(withoutCaptcha)
+            .expect(400);
     });
 
     it('từ chối sai mật khẩu', async () => {

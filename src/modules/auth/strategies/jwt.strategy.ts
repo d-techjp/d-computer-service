@@ -7,6 +7,7 @@ import type {
     JwtPayload,
 } from '../../../common/interfaces/authenticated-user.interface';
 import { AuthService } from '../application/auth.service';
+import { extractTokenFromCookie } from '../infrastructure/auth-cookie';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -15,7 +16,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         private readonly authService: AuthService,
     ) {
         super({
-            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            // Header trước (trang quản trị, công cụ), rồi cookie phiên của storefront
+            jwtFromRequest: ExtractJwt.fromExtractors([
+                ExtractJwt.fromAuthHeaderAsBearerToken(),
+                extractTokenFromCookie,
+            ]),
             ignoreExpiration: false,
             secretOrKey: configService.getOrThrow<string>('jwt.secret'),
             issuer: 'd-computer-service',
