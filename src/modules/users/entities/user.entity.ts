@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Exclude } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { SoftDeletableEntity } from '../../../common/entities/base.entity';
 import { Article } from '../../articles/entities/article.entity';
@@ -41,6 +41,12 @@ export class User extends SoftDeletableEntity {
     @Column({ type: 'varchar', length: 500, nullable: true })
     avatarUrl: string | null;
 
+    /** `sub` của tài khoản Google đã liên kết. Ẩn khỏi response — FE chỉ cần biết có hay không. */
+    @Exclude({ toPlainOnly: true })
+    @Index('uq_users_google_id', { unique: true, where: '"deleted_at" IS NULL' })
+    @Column({ type: 'varchar', length: 64, nullable: true })
+    googleId: string | null;
+
     @ApiProperty({ format: 'uuid', description: 'Vai trò — quyết định permission của user' })
     @Index('idx_users_role')
     @Column({ type: 'uuid' })
@@ -68,5 +74,12 @@ export class User extends SoftDeletableEntity {
 
     get isActive(): boolean {
         return this.status === UserStatus.ACTIVE;
+    }
+
+    /** Storefront ẩn mục "Đổi mật khẩu" với tài khoản đăng nhập bằng Google. */
+    @ApiProperty({ description: 'Tài khoản đã liên kết đăng nhập Google' })
+    @Expose()
+    get hasGoogleLogin(): boolean {
+        return Boolean(this.googleId);
     }
 }

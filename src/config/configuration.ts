@@ -53,6 +53,12 @@ export const configuration = () => ({
         // Máy POS mặc định của màn bán tại quầy (`tmr_...`). Để trống thì nhân viên chọn máy.
         terminalReaderId: process.env.STRIPE_TERMINAL_READER_ID ?? '',
     },
+    auth: {
+        // Cloudflare Turnstile — chặn bot ở đăng ký / đăng nhập storefront
+        turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY ?? '',
+        // OAuth Client ID (Web) — dùng làm `audience` khi xác minh ID token của Google
+        googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
+    },
     mail: {
         resendApiKey: process.env.RESEND_API_KEY ?? '',
         // Phải thuộc domain đã xác thực trên Resend, vd "D-Tech <order@d-techjp.com>"

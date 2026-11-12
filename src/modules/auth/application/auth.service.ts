@@ -10,11 +10,14 @@ import { ActivityLogsService } from '../../activity-logs/activity-logs.service';
 import { ActivityAction, ActivityStatus } from '../../activity-logs/enums/activity-action.enum';
 import { UserPermissionsService } from '../../rbac/user-permissions.service';
 import { User, UserStatus } from '../../users/entities/user.entity';
+import {
+    CustomerAccountsService,
+    type RegisterCustomerInput,
+} from '../../users/application/customer-accounts.service';
 import { UsersService } from '../../users/application/users.service';
 import type { AuthResponseDto } from '../dto/auth-response.dto';
 import type { ChangePasswordDto } from '../dto/change-password.dto';
 import type { LoginDto } from '../dto/login.dto';
-import type { RegisterDto } from '../dto/register.dto';
 import { TokenVersionStore } from '../token-version/token-version.store';
 
 @Injectable()
@@ -25,6 +28,7 @@ export class AuthService {
 
     constructor(
         private readonly usersService: UsersService,
+        private readonly customerAccountsService: CustomerAccountsService,
         private readonly jwtService: JwtService,
         private readonly tokenVersionStore: TokenVersionStore,
         private readonly activityLogsService: ActivityLogsService,
@@ -36,9 +40,8 @@ export class AuthService {
         this.issuer = 'd-computer-service';
     }
 
-    async register(dto: RegisterDto): Promise<AuthResponseDto> {
-        // RegisterDto đã bỏ roleCode -> UsersService tự gán vai trò khách hàng
-        const user = await this.usersService.create(dto);
+    async register(input: RegisterCustomerInput): Promise<AuthResponseDto> {
+        const user = await this.customerAccountsService.register(input);
 
         await this.activityLogsService.record({
             userId: user.id,
@@ -61,7 +64,7 @@ export class AuthService {
         dto: LoginDto,
         options?: { requireAdminAccess?: boolean },
     ): Promise<AuthResponseDto> {
-        const user = await this.usersService.findByUsernameWithPassword(dto.username);
+        const user = await this.usersService.findByLoginWithPassword(dto.username);
 
         // So khớp password kể cả khi không tìm thấy user cũng không đổi luồng:
         // thông báo lỗi giữ nguyên để tránh lộ username nào đã tồn tại.
@@ -81,8 +84,22 @@ export class AuthService {
             throw new UnauthorizedException('Tên đăng nhập hoặc mật khẩu không đúng');
         }
 
+        // Mọi lý do từ chối phải chạy TRƯỚC `completeLogin` (nơi gọi `issueToken`)
+        if (options?.requireAdminAccess) {
+            this.assertUsable(user);
+            await this.assertAdminAccess(user);
+        }
+
+        return this.completeLogin(user, 'password');
+    }
+
+    /**
+     * Bước cuối chung của mọi kiểu đăng nhập: chặn tài khoản khoá/chưa kích hoạt,
+     * cấp token (tăng token version), ghi lần đăng nhập. Luồng Google dùng lại
+     * hàm này để không có đường nào cấp token mà bỏ qua `assertUsable`.
+     */
+    async completeLogin(user: User, provider: 'password' | 'google'): Promise<AuthResponseDto> {
         this.assertUsable(user);
-        if (options?.requireAdminAccess) await this.assertAdminAccess(user);
 
         const auth = await this.issueToken(user);
         await this.usersService.markLoggedIn(user.id);
@@ -92,10 +109,22 @@ export class AuthService {
             action: ActivityAction.LOGIN,
             resource: 'auth',
             resourceId: user.id,
-            metadata: {},
+            metadata: { provider },
         });
 
         return auth;
+    }
+
+    /** Khách mới tạo qua Google: ghi `REGISTER` như form đăng ký, để thống kê không lệch. */
+    async recordRegistration(user: User, provider: 'google'): Promise<void> {
+        await this.activityLogsService.record({
+            userId: user.id,
+            email: user.email,
+            action: ActivityAction.REGISTER,
+            resource: 'auth',
+            resourceId: user.id,
+            metadata: { provider },
+        });
     }
 
     /** Tăng version -> token đang cầm lập tức hết hiệu lực. */

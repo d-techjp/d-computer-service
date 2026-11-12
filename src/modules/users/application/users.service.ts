@@ -62,8 +62,8 @@ export class UsersService {
     }
 
     /** Dùng cho luồng đăng nhập: kèm cột `password` (mặc định select:false) và role. */
-    findByUsernameWithPassword(username: string): Promise<User | null> {
-        return this.usersRepository.findByUsernameWithPassword(username);
+    findByLoginWithPassword(login: string): Promise<User | null> {
+        return this.usersRepository.findByLoginWithPassword(login);
     }
 
     /** Dùng cho luồng đổi mật khẩu: kèm cột `password` (mặc định select:false). */
@@ -105,6 +105,9 @@ export class UsersService {
     async remove(id: string): Promise<void> {
         const user = await this.findOne(id);
         await this.usersRepository.softRemove(user);
+        // Token còn hạn của tài khoản đã xoá vẫn qua được JwtStrategy (chỉ đối chiếu
+        // version trong Redis) — thu hồi để nó chết ngay thay vì sống tới khi hết hạn.
+        await this.tokenVersionStore.revoke(id);
     }
 
     async updatePassword(id: string, hashedPassword: string): Promise<void> {
@@ -161,11 +164,20 @@ export class UsersService {
     }
 
     /** `kh<số điện thoại>`, trùng (vd tài khoản cũ đã xoá) thì thêm hậu tố ngẫu nhiên. */
-    private async generateCustomerUsername(digits: string): Promise<string> {
-        const base = `kh${digits}`.slice(0, 40);
-        if (!(await this.usersRepository.existsByUsername(base))) return base;
+    private generateCustomerUsername(digits: string): Promise<string> {
+        return this.generateUniqueUsername(`kh${digits}`);
+    }
+
+    /**
+     * Username chưa ai dùng (kể cả tài khoản đã xoá), dựa trên `base`. Ký tự không
+     * hợp lệ bị bỏ để luôn thoả `USERNAME_RULE`; trùng thì thêm hậu tố ngẫu nhiên.
+     */
+    async generateUniqueUsername(base: string): Promise<string> {
+        const cleaned = base.toLowerCase().replace(/[^a-z0-9_.]/g, '');
+        const stem = (cleaned.length >= 3 ? cleaned : `kh${cleaned}`).slice(0, 40);
+        if (!(await this.usersRepository.existsByUsername(stem))) return stem;
         for (let attempt = 0; attempt < 5; attempt += 1) {
-            const candidate = `${base}_${randomBytes(3).toString('hex')}`;
+            const candidate = `${stem}_${randomBytes(3).toString('hex')}`;
             if (!(await this.usersRepository.existsByUsername(candidate))) return candidate;
         }
         throw new ConflictException('Không sinh được username cho khách mới, vui lòng thử lại');

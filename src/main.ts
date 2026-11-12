@@ -24,9 +24,12 @@ async function bootstrap(): Promise<void> {
     app.use(compression());
     app.set('trust proxy', 1); // lấy đúng client IP khi chạy sau reverse proxy
 
+    // Trang quản trị gọi API khác origin bằng header Authorization, không cần cookie.
+    // `credentials: false` để site khác không bao giờ đọc được response kèm cookie
+    // phiên storefront (cookie đó chỉ dùng cùng origin, qua nginx).
     app.enableCors({
         origin: true,
-        credentials: true,
+        credentials: false,
     });
 
     app.setGlobalPrefix(apiPrefix, { exclude: ['health'] });

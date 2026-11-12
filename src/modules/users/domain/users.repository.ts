@@ -11,8 +11,20 @@ export abstract class UsersRepository {
 
     abstract findById(id: string): Promise<User | null>;
 
-    /** Kèm cột `password` (mặc định `select: false`) — dùng cho luồng đăng nhập. */
-    abstract findByUsernameWithPassword(username: string): Promise<User | null>;
+    /**
+     * Kèm cột `password` (mặc định `select: false`) — dùng cho luồng đăng nhập.
+     * `login` là username HOẶC email: username không chứa `@`, nên hai loại
+     * không bao giờ khớp nhầm sang nhau.
+     */
+    abstract findByLoginWithPassword(login: string): Promise<User | null>;
+
+    abstract findByGoogleId(googleId: string): Promise<User | null>;
+
+    /** Chỉ user còn sống (khác `existsByEmail`, vốn tính cả bản ghi đã xoá). */
+    abstract findByEmail(email: string): Promise<User | null>;
+
+    /** Gắn tài khoản Google và thay mật khẩu trong cùng một câu UPDATE. */
+    abstract linkGoogle(id: string, googleId: string, hashedPassword: string): Promise<void>;
 
     /** Kèm cột `password` — dùng cho luồng đổi mật khẩu. */
     abstract findByIdWithPassword(id: string): Promise<User | null>;

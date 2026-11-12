@@ -61,13 +61,27 @@ export class TypeOrmUsersRepository extends UsersRepository {
         return this.repo.findOne({ where: { id } });
     }
 
-    findByUsernameWithPassword(username: string): Promise<User | null> {
+    findByLoginWithPassword(login: string): Promise<User | null> {
         return this.repo
             .createQueryBuilder('user')
             .leftJoinAndSelect('user.role', 'role')
             .addSelect('user.password')
-            .where('user.username = :username', { username: username.toLowerCase() })
+            .where('(user.username = :login OR user.email = :login)', {
+                login: login.toLowerCase(),
+            })
             .getOne();
+    }
+
+    findByGoogleId(googleId: string): Promise<User | null> {
+        return this.repo.findOne({ where: { googleId } });
+    }
+
+    findByEmail(email: string): Promise<User | null> {
+        return this.repo.findOne({ where: { email: email.toLowerCase() } });
+    }
+
+    async linkGoogle(id: string, googleId: string, hashedPassword: string): Promise<void> {
+        await this.repo.update({ id }, { googleId, password: hashedPassword });
     }
 
     findByIdWithPassword(id: string): Promise<User | null> {

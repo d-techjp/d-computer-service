@@ -49,6 +49,11 @@ inventory, dashboard) keep their controller flat at the module root and only use
   user has **one active session**. Losing Redis data logs every user out. `/admin/auth/*` is a separate
   admin gate: it rejects by the role's *permission count* and must reject **before** `issueToken`
   (otherwise it kills the user's storefront session).
+- **Storefront auth:** `/auth/{login,register,google}` require a Cloudflare Turnstile token
+  (`TurnstileGuard`, fail-closed) and also set the httpOnly cookie `dcs_session`; `JwtStrategy` reads
+  the Bearer header first, then that cookie. CORS stays `credentials: false` so no other site can read
+  cookie-authenticated responses. Google sign-in links to an existing *customer* by verified email and
+  rotates its password; staff accounts are never linked. Login accepts username or email.
 - **RBAC:** every route requires login by default. `@Public()` opens a route, `@RequirePermissions(...)`
   restricts it (any one of the listed permissions passes). Role permissions are cached in Redis
   `permissions:role:<code>` with a 1h TTL.

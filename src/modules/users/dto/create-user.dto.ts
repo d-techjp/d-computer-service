@@ -5,13 +5,13 @@ import {
     IsEmail,
     IsEnum,
     IsOptional,
-    IsPhoneNumber,
     IsString,
     IsUrl,
     Matches,
     MaxLength,
     MinLength,
 } from 'class-validator';
+import { IsJpOrVnPhone } from '../../../common/validators/is-jp-or-vn-phone.decorator';
 import { UserStatus } from '../entities/user.entity';
 
 export const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -52,7 +52,7 @@ export class CreateUserDto {
     fullName: string;
 
     @ApiPropertyOptional({ example: '0901234567' })
-    @IsPhoneNumber('VN', { message: 'Số điện thoại không hợp lệ' })
+    @IsJpOrVnPhone()
     @IsOptional()
     phone?: string;
 
