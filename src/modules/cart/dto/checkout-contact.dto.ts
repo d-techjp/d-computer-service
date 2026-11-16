@@ -24,7 +24,9 @@ export class CheckoutContactDto extends CheckoutPreviewDto {
     @ApiPropertyOptional({
         enum: ORDER_LOCALES,
         default: 'ja',
-        description: 'Ngôn ngữ storefront — dùng cho email và trang thanh toán',
+        description:
+            'Không còn dùng: storefront chỉ tiếng Nhật, đơn luôn lưu `ja`. Vẫn nhận để FE bản cũ ' +
+            '(còn cache trên trình duyệt) gửi `vi` không bị 400.',
     })
     @IsIn(ORDER_LOCALES)
     @IsOptional()

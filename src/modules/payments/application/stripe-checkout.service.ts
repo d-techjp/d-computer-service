@@ -182,7 +182,9 @@ export class StripeCheckoutService {
 
     private buildSessionParams(order: Order, cartId: string): Stripe.Checkout.SessionCreateParams {
         const locale: OrderLocale = order.locale;
-        const checkoutPath = `${this.storefrontUrl}/${locale}/checkout`;
+        // Storefront chỉ còn tiếng Nhật, URL không có tiền tố ngôn ngữ nữa.
+        // (Link `/ja/...` cũ vẫn chạy nhờ redirect 301 ở storefront.)
+        const checkoutPath = `${this.storefrontUrl}/checkout`;
         const metadata = { orderId: order.id, orderCode: order.code, cartId };
 
         return {
