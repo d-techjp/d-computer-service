@@ -6,9 +6,9 @@ import { OrderStatus, PaymentStatus } from '../../../orders/enums/order.enum';
  * Giống `PlaceOrderDto` nhưng không có `paymentMethod` (luôn là Stripe; khách
  * chọn thẻ hay PayPay trên trang của Stripe).
  *
- * `locale` (từ `CheckoutContactDto`) quyết định URL quay về — nhận locale chứ
- * không nhận URL: cho khách tự gửi URL là mở cửa cho open redirect qua chính
- * trang thanh toán của mình.
+ * URL quay về do server tự dựng từ `storefront.url`, không bao giờ nhận từ
+ * client: cho khách tự gửi URL là mở cửa cho open redirect qua chính trang
+ * thanh toán của mình.
  */
 export class StripeCheckoutDto extends CheckoutContactDto {}
 

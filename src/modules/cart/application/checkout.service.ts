@@ -4,7 +4,7 @@ import type { AuthenticatedUser } from '../../../common/interfaces/authenticated
 import { OrdersService } from '../../orders/application/orders.service';
 import type { CreateOrderDto, ShippingAddressDto } from '../../orders/dto/create-order.dto';
 import type { Order } from '../../orders/entities/order.entity';
-import { PaymentMethod } from '../../orders/enums/order.enum';
+import { DEFAULT_ORDER_LOCALE, PaymentMethod } from '../../orders/enums/order.enum';
 import type { CheckoutSummaryDto } from '../client/dto/checkout-summary.dto';
 import { toPublicCart } from '../client/dto/public-cart.dto';
 import type { CheckoutPreviewDto } from '../dto/checkout-preview.dto';
@@ -113,7 +113,9 @@ export class CheckoutService {
             paymentMethod: dto.paymentMethod,
             note: dto.note,
             customerEmail: dto.email,
-            locale: dto.locale,
+            // Storefront chỉ còn tiếng Nhật — bỏ qua `dto.locale` (FE cũ có thể còn gửi `vi`)
+            // để trang Stripe và mọi thứ dựa trên `order.locale` đều ra tiếng Nhật.
+            locale: DEFAULT_ORDER_LOCALE,
         };
 
         const order = await this.ordersService.create(

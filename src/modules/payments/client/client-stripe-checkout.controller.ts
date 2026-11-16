@@ -30,7 +30,7 @@ export class ClientStripeCheckoutController {
             'Tạo đơn `awaiting_payment` (chưa trừ kho) rồi trả `checkoutUrl` — FE chuyển ' +
             'hẳn trang sang URL này. Giỏ hàng CHƯA bị đóng: khách bấm quay lại trên Stripe ' +
             'thì vẫn dùng tiếp giỏ cũ. Thanh toán xong Stripe chuyển về ' +
-            '`/{locale}/checkout/success?session_id=...`.',
+            '`/checkout/success?session_id=...`.',
     })
     start(
         @Body() dto: StripeCheckoutDto,
