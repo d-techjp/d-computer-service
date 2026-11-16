@@ -9,6 +9,7 @@ import { ProductsRepository } from '../domain/products.repository';
 import type { QueryProductDto } from '../dto/query-product.dto';
 import { Product, ProductStatus } from '../entities/product.entity';
 import { refreshProductAggregates } from './product-aggregates';
+import { applySearchFilter, parseSearchTokens, relevanceScoreSql } from './product-search.query';
 
 /** Chi tiết sản phẩm nạp kèm toàn bộ biến thể + tổ hợp option của từng biến thể. */
 const DETAIL_RELATIONS = {
@@ -53,6 +54,13 @@ export class TypeOrmProductsRepository extends ProductsRepository {
         criteria: QueryProductDto,
         options?: ProductSearchOptions,
     ): Promise<RepositoryPage<Product>> {
+        const tokens = parseSearchTokens(criteria.search);
+        // Có từ khoá mà người dùng không chọn cách sắp xếp (vẫn là mặc định
+        // `createdAt`) -> xếp theo độ liên quan, kết quả khớp tên lên trước.
+        if (tokens.length > 0 && criteria.sortBy === 'createdAt') {
+            return this.searchByRelevance(criteria, tokens, options);
+        }
+
         const qb = this.buildSearchQuery(criteria, options);
 
         const sortBy = resolveSortColumn(criteria.sortBy, PRODUCT_SORTABLE_COLUMNS, 'createdAt');
@@ -63,6 +71,39 @@ export class TypeOrmProductsRepository extends ProductsRepository {
             .take(criteria.limit);
 
         const [items, total] = await qb.getManyAndCount();
+        return { items, total };
+    }
+
+    /**
+     * Hai bước: (1) lấy id đã xếp theo điểm + phân trang bằng SQL thuần, (2) nạp
+     * entity theo đúng các id đó. `orderBy` theo alias tính toán kết hợp với
+     * `skip/take` của TypeORM không ổn định, nên không gộp làm một.
+     * Mỗi sản phẩm chỉ join đúng 1 biến thể mặc định nên offset/limit không lệch.
+     */
+    private async searchByRelevance(
+        criteria: QueryProductDto,
+        tokens: string[],
+        options?: ProductSearchOptions,
+    ): Promise<RepositoryPage<Product>> {
+        const ranked = await this.buildSearchQuery(criteria, options)
+            .select('product.id', 'id')
+            .addSelect(relevanceScoreSql(tokens), 'score')
+            .orderBy('score', 'DESC')
+            .addOrderBy('product.soldCount', 'DESC')
+            .addOrderBy('product.createdAt', 'DESC')
+            .offset(criteria.skip)
+            .limit(criteria.limit)
+            .getRawMany<{ id: string }>();
+        const total = await this.buildSearchQuery(criteria, options).getCount();
+
+        const ids = ranked.map((row) => row.id);
+        if (ids.length === 0) return { items: [], total };
+
+        const items = await this.buildSearchQuery(criteria, options)
+            .andWhere('product.id IN (:...rankedIds)', { rankedIds: ids })
+            .getMany();
+        const position = new Map(ids.map((id, index) => [id, index]));
+        items.sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
         return { items, total };
     }
 
@@ -85,15 +126,7 @@ export class TypeOrmProductsRepository extends ProductsRepository {
                 'variant.is_default = true AND variant.deleted_at IS NULL',
             );
 
-        if (criteria.search) {
-            qb.andWhere(
-                '(product.name ILIKE :search OR product.shortDescription ILIKE :search' +
-                    ' OR EXISTS (SELECT 1 FROM product_variants sv' +
-                    ' WHERE sv.product_id = product.id AND sv.deleted_at IS NULL' +
-                    ' AND sv.sku ILIKE :search))',
-                { search: `%${criteria.search}%` },
-            );
-        }
+        applySearchFilter(qb, parseSearchTokens(criteria.search));
 
         if (options?.categoryIds) {
             qb.andWhere('product.categoryId IN (:...categoryIds)', {
