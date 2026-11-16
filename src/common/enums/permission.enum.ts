@@ -24,6 +24,7 @@ export enum PermissionCode {
     CAMPAIGN_TIKTOK_MANAGE = 'campaign.tiktok.manage',
 
     SITE_SETTINGS_MANAGE = 'site.settings.manage',
+    SITE_PAGES_MANAGE = 'site.pages.manage',
 
     ARTICLE_MANAGE = 'articles.manage',
 
@@ -104,6 +105,12 @@ export const PERMISSION_CATALOG: readonly PermissionDefinition[] = [
         description: 'Sửa tên công ty, hotline, địa chỉ, link mạng xã hội hiển thị ở footer',
     },
     {
+        code: PermissionCode.SITE_PAGES_MANAGE,
+        name: 'Quản lý trang tĩnh',
+        module: 'campaign',
+        description: 'Tạo, sửa, xuất bản, xoá trang tĩnh (chính sách, giới thiệu…) trên storefront',
+    },
+    {
         code: PermissionCode.ARTICLE_MANAGE,
         name: 'Quản lý bài viết',
         module: 'article',
@@ -160,6 +167,7 @@ export const SYSTEM_ROLES: readonly RoleDefinition[] = [
             PermissionCode.PRODUCT_CAROUSEL_MANAGE,
             PermissionCode.CAMPAIGN_TIKTOK_MANAGE,
             PermissionCode.SITE_SETTINGS_MANAGE,
+            PermissionCode.SITE_PAGES_MANAGE,
             PermissionCode.ARTICLE_MANAGE,
         ],
     },

@@ -14,6 +14,7 @@ import { envValidationSchema } from './config/env.validation';
 import { buildDataSourceOptions, type DatabaseConfig } from './config/typeorm.config';
 import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module';
 import { ArticlesModule } from './modules/articles/articles.module';
+import { PagesModule } from './modules/pages/pages.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BrandsModule } from './modules/brands/brands.module';
 import { CarouselsModule } from './modules/carousels/carousels.module';
@@ -66,6 +67,7 @@ import { RedisModule } from './redis/redis.module';
         TiktokVideosModule,
         SiteSettingsModule,
         ArticlesModule,
+        PagesModule,
         OrdersModule,
         CartModule,
         PaymentsModule,
