@@ -9,6 +9,7 @@ import {
     OrderPlacedEvent,
     OrderStatusChangedEvent,
 } from '../orders/events/order.events';
+import { NotificationSettingsService } from '../notification-settings/application/notification-settings.service';
 import { SiteSettingsService } from '../site-settings/application/site-settings.service';
 import { MailSender } from './infrastructure/mail.sender';
 import {
@@ -26,16 +27,15 @@ import {
 @Injectable()
 export class OrderMailListener {
     private readonly logger = new Logger(OrderMailListener.name);
-    private readonly shopNotifyEmails: string[];
     private readonly adminUrl: string;
 
     constructor(
         private readonly mail: MailSender,
         private readonly ordersService: OrdersService,
         private readonly siteSettingsService: SiteSettingsService,
+        private readonly notificationSettingsService: NotificationSettingsService,
         configService: ConfigService,
     ) {
-        this.shopNotifyEmails = configService.get<string[]>('mail.shopNotifyEmails', []);
         this.adminUrl = configService.get<string>('mail.adminUrl', '');
     }
 
@@ -49,13 +49,17 @@ export class OrderMailListener {
                 await this.mail.send({
                     to: order.customerEmail,
                     ...buildOrderPlacedMail(order, shop),
+                    replyTo: shop.email,
                     idempotencyKey: `order-placed-${order.id}`,
                 });
             }
             // Đơn tại quầy do chính nhân viên vừa lên — báo "có đơn mới" là thừa
-            if (this.shopNotifyEmails.length > 0 && order.channel !== OrderChannel.IN_STORE) {
+            if (order.channel === OrderChannel.IN_STORE) return;
+            // Đọc mỗi lần gửi (không cache): admin đổi hộp thư là có hiệu lực ngay
+            const { orderNotifyEmails } = await this.notificationSettingsService.get();
+            if (orderNotifyEmails.length > 0) {
                 await this.mail.send({
-                    to: this.shopNotifyEmails,
+                    to: orderNotifyEmails,
                     ...buildShopNewOrderMail(order, shop, this.adminOrderUrl(order)),
                     idempotencyKey: `order-placed-shop-${order.id}`,
                 });
@@ -74,12 +78,14 @@ export class OrderMailListener {
             // từng nhận xác nhận đặt hàng, báo "đã huỷ" chỉ gây hoang mang.
             if (event.from === OrderStatus.AWAITING_PAYMENT && !this.wasPaid(order)) return;
 
-            const content = buildOrderStatusMail(order, event.to, await this.shopInfo());
+            const shop = await this.shopInfo();
+            const content = buildOrderStatusMail(order, event.to, shop);
             if (!content) return;
 
             await this.mail.send({
                 to: order.customerEmail,
                 ...content,
+                replyTo: shop.email,
                 idempotencyKey: `order-status-${order.id}-${event.to}`,
             });
         });
@@ -98,7 +104,12 @@ export class OrderMailListener {
 
     private async shopInfo(): Promise<ShopInfo> {
         const settings = await this.siteSettingsService.get();
-        return { name: settings.companyName, phone: settings.phone, address: settings.address };
+        return {
+            name: settings.companyName,
+            phone: settings.phone,
+            address: settings.address,
+            email: settings.supportEmail,
+        };
     }
 
     private async safely(label: string, work: () => Promise<void>): Promise<void> {

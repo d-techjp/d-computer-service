@@ -21,6 +21,7 @@ export class SiteSettingsService {
                 companyName: '',
                 phone: '',
                 address: '',
+                supportEmail: '',
                 socialLinks: [],
                 footerColumns: [],
             }),

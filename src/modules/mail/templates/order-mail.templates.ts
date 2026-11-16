@@ -13,6 +13,8 @@ export interface ShopInfo {
     name: string;
     phone: string;
     address: string;
+    /** Email hỗ trợ — rỗng thì không in. */
+    email: string;
 }
 
 export interface MailContent {
@@ -509,14 +511,14 @@ function button(label: string, url: string): string {
 }
 
 function shopFooterHtml(shop: ShopInfo): string {
-    return [shop.name, shop.phone, shop.address]
+    return [shop.name, shop.phone, shop.email, shop.address]
         .filter(Boolean)
         .map((line) => escapeHtml(line))
         .join('<br>');
 }
 
 function shopFooterText(shop: ShopInfo): string {
-    const lines = [shop.name, shop.phone, shop.address].filter(Boolean);
+    const lines = [shop.name, shop.phone, shop.email, shop.address].filter(Boolean);
     return lines.length > 0 ? ['', '--', ...lines].join('\n') : '';
 }
 

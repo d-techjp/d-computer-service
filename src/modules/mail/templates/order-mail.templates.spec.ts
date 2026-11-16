@@ -12,7 +12,12 @@ import {
     type ShopInfo,
 } from './order-mail.templates';
 
-const shop: ShopInfo = { name: 'ディーテック株式会社', phone: '03-0000-0000', address: 'Tokyo' };
+const shop: ShopInfo = {
+    name: 'ディーテック株式会社',
+    phone: '03-0000-0000',
+    address: 'Tokyo',
+    email: 'support@example.com',
+};
 
 function makeOrder(overrides: Partial<Order> = {}): Order {
     return {
@@ -130,5 +135,15 @@ describe('order mail templates', () => {
         );
         expect(mail.html).toContain('https://admin.example/orders/order-1');
         expect(buildShopNewOrderMail(makeOrder(), shop, null).html).not.toContain('<a href');
+    });
+
+    it('footer có email hỗ trợ, bỏ dòng đó khi shop chưa nhập email', () => {
+        const mail = buildOrderPlacedMail(makeOrder(), shop);
+        expect(mail.html).toContain('support@example.com');
+        expect(mail.text).toContain('support@example.com');
+
+        const noEmail = buildOrderPlacedMail(makeOrder(), { ...shop, email: '' });
+        expect(noEmail.text).not.toContain('support@example.com');
+        expect(noEmail.html).not.toContain('<br><br>');
     });
 });

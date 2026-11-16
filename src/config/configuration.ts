@@ -63,12 +63,6 @@ export const configuration = () => ({
         resendApiKey: process.env.RESEND_API_KEY ?? '',
         // Phải thuộc domain đã xác thực trên Resend, vd "D-Tech <order@d-techjp.com>"
         from: process.env.MAIL_FROM ?? '',
-        replyTo: process.env.MAIL_REPLY_TO ?? '',
-        // Hộp thư nhận báo đơn mới — nhiều địa chỉ cách nhau bởi dấu phẩy
-        shopNotifyEmails: (process.env.SHOP_NOTIFY_EMAILS ?? '')
-            .split(',')
-            .map((email) => email.trim())
-            .filter(Boolean),
         // Gốc trang quản trị, để email báo đơn mới có link mở thẳng đơn
         adminUrl: (process.env.ADMIN_URL ?? '').replace(/\/+$/, ''),
     },

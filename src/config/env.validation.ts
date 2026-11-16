@@ -50,11 +50,6 @@ export const envValidationSchema = Joi.object({
     TURNSTILE_SECRET_KEY: Joi.string().allow('').default(''),
     GOOGLE_CLIENT_ID: Joi.string().allow('').default(''),
     MAIL_FROM: Joi.string().allow('').default(''),
-    MAIL_REPLY_TO: Joi.string()
-        .email({ tlds: { allow: false } })
-        .allow('')
-        .default(''),
-    SHOP_NOTIFY_EMAILS: Joi.string().allow('').default(''),
     ADMIN_URL: Joi.string()
         .uri({ scheme: ['http', 'https'] })
         .allow('')

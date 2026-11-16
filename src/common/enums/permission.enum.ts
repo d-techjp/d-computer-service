@@ -33,6 +33,8 @@ export enum PermissionCode {
     INVENTORY_MANAGE = 'inventory.manage',
 
     LOGS_VIEW = 'logs.view',
+
+    SETTINGS_MANAGE = 'settings.manage',
 }
 
 export interface PermissionDefinition {
@@ -102,7 +104,7 @@ export const PERMISSION_CATALOG: readonly PermissionDefinition[] = [
         code: PermissionCode.SITE_SETTINGS_MANAGE,
         name: 'Quản lý thông tin cửa hàng',
         module: 'campaign',
-        description: 'Sửa tên công ty, hotline, địa chỉ, link mạng xã hội hiển thị ở footer',
+        description: 'Sửa tên công ty, hotline, địa chỉ, email hỗ trợ, link mạng xã hội ở footer',
     },
     {
         code: PermissionCode.SITE_PAGES_MANAGE,
@@ -133,6 +135,12 @@ export const PERMISSION_CATALOG: readonly PermissionDefinition[] = [
         name: 'Xem nhật ký hoạt động',
         module: 'system',
         description: 'Tra cứu activity log toàn hệ thống',
+    },
+    {
+        code: PermissionCode.SETTINGS_MANAGE,
+        name: 'Quản lý cài đặt hệ thống',
+        module: 'system',
+        description: 'Sửa cấu hình vận hành: hộp thư nhận email báo đơn mới',
     },
 ];
 

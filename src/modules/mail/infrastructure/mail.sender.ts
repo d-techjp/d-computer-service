@@ -7,6 +7,8 @@ export interface OutgoingMail {
     subject: string;
     html: string;
     text: string;
+    /** Khách bấm "Trả lời" thì thư về đây — thường là email hỗ trợ trong Thông tin cửa hàng. */
+    replyTo?: string;
     /**
      * Resend bỏ qua lần gửi trùng key trong 24h — sự kiện bắn lại (retry, hai
      * đường xác nhận thanh toán) cũng chỉ ra một email.
@@ -26,12 +28,10 @@ export class MailSender {
     private readonly logger = new Logger(MailSender.name);
     private readonly client: Resend | null;
     private readonly from: string;
-    private readonly replyTo: string | undefined;
 
     constructor(configService: ConfigService) {
         const apiKey = configService.get<string>('mail.resendApiKey', '');
         this.from = configService.get<string>('mail.from', '');
-        this.replyTo = configService.get<string>('mail.replyTo') || undefined;
         this.client = apiKey && this.from ? new Resend(apiKey) : null;
 
         if (!this.client) {
@@ -57,7 +57,7 @@ export class MailSender {
                     subject: mail.subject,
                     html: mail.html,
                     text: mail.text,
-                    replyTo: this.replyTo,
+                    replyTo: mail.replyTo || undefined,
                 },
                 mail.idempotencyKey ? { idempotencyKey: mail.idempotencyKey } : undefined,
             );

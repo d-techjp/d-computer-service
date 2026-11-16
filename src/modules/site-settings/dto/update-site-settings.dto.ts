@@ -2,14 +2,16 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
     IsArray,
+    IsEmail,
     IsOptional,
+    ValidateIf,
     IsString,
     Matches,
     MaxLength,
     MinLength,
     ValidateNested,
 } from 'class-validator';
-import { toTrimmed } from '../../../common/transformers/transform.helpers';
+import { toLowerTrimmed, toTrimmed } from '../../../common/transformers/transform.helpers';
 import { FooterColumnDto } from './footer-column.dto';
 import { SocialLinkDto } from './social-link.dto';
 
@@ -43,6 +45,18 @@ export class UpdateSiteSettingsDto {
     @MaxLength(500)
     @IsOptional()
     address?: string;
+
+    @ApiPropertyOptional({
+        example: 'support@d-techjp.com',
+        description: 'Gửi chuỗi rỗng để xoá',
+    })
+    @Transform(toLowerTrimmed)
+    // Chuỗi rỗng hợp lệ (= không có email hỗ trợ), chỉ kiểm định dạng khi có giá trị
+    @ValidateIf((_, value) => value !== '')
+    @IsEmail({}, { message: 'Email hỗ trợ không hợp lệ' })
+    @MaxLength(255)
+    @IsOptional()
+    supportEmail?: string;
 
     @ApiPropertyOptional({
         example: 'T1234567890123',

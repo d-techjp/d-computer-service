@@ -6,6 +6,7 @@ export class PublicSiteSettingsDto {
     @ApiProperty({ example: 'D-TECH' }) companyName: string;
     @ApiProperty({ example: '080-6473-2260' }) phone: string;
     @ApiProperty({ example: '大阪市西成区玉出東１－３－１６ ドエル１番館103号' }) address: string;
+    @ApiProperty({ example: 'support@d-techjp.com' }) supportEmail: string;
     @ApiProperty({ type: () => [SocialLink] }) socialLinks: SocialLink[];
     @ApiProperty({ type: () => [FooterColumn] }) footerColumns: FooterColumn[];
 }
@@ -14,6 +15,7 @@ export const toPublicSiteSettings = (settings: SiteSettings): PublicSiteSettings
     companyName: settings.companyName,
     phone: settings.phone,
     address: settings.address,
+    supportEmail: settings.supportEmail,
     socialLinks: settings.socialLinks,
     footerColumns: settings.footerColumns,
 });

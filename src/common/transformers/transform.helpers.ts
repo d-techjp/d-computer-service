@@ -15,6 +15,15 @@ export const toLowerTrimmed = ({ value }: TransformFnParams): unknown => {
     return typeof raw === 'string' ? raw.trim().toLowerCase() : raw;
 };
 
+/** Mảng chuỗi (vd danh sách email) -> từng phần tử trim + chữ thường; giữ nguyên nếu không phải mảng. */
+export const toLowerTrimmedEach = ({ value }: TransformFnParams): unknown => {
+    const raw: unknown = value;
+    if (!Array.isArray(raw)) return raw;
+    return raw.map((item: unknown) =>
+        typeof item === 'string' ? item.trim().toLowerCase() : item,
+    );
+};
+
 export const toUpperTrimmed = ({ value }: TransformFnParams): unknown => {
     const raw: unknown = value;
     return typeof raw === 'string' ? raw.trim().toUpperCase() : raw;

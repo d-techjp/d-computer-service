@@ -70,6 +70,14 @@ export class SiteSettings extends BaseEntity {
     address: string;
 
     @ApiProperty({
+        example: 'support@d-techjp.com',
+        description:
+            'Email hỗ trợ khách — hiện ở footer mail đơn hàng và là Reply-To của mail gửi khách. Rỗng = không có',
+    })
+    @Column({ type: 'varchar', length: 255, default: '' })
+    supportEmail: string;
+
+    @ApiProperty({
         example: 'T1234567890123',
         description:
             'Số đăng ký 適格請求書発行事業者 (インボイス) — in trên bill. Rỗng = chưa đăng ký, không in',
