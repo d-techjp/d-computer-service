@@ -287,7 +287,7 @@ export function buildShopNewOrderMail(
         ['Khách hàng', address.fullName],
         ['Điện thoại', address.phone],
         ['Email', order.customerEmail ?? '—'],
-        ['Thanh toán', `${method}${paidLabel}`],
+        // Phương thức thanh toán đã có ở bảng tóm tắt đơn bên dưới (và trên tiêu đề)
     ];
 
     return {
@@ -327,7 +327,7 @@ function orderDetailsHtml(order: Order, t: Dictionary): string {
         .map(
             ({ item, components }) => `
             <tr>
-                <td style="padding:10px 0;border-bottom:1px solid #eceef2;vertical-align:top">
+                <td style="padding:10px 12px 10px 0;border-bottom:1px solid #eceef2;vertical-align:top;overflow-wrap:anywhere;word-break:break-word">
                     <div style="font-weight:600;color:#1f2430">${escapeHtml(itemName(item))}</div>
                     ${components
                         .map(
@@ -381,7 +381,7 @@ function orderDetailsHtml(order: Order, t: Dictionary): string {
             order.channel === OrderChannel.IN_STORE
                 ? ''
                 : `<h3 style="font-size:14px;margin:24px 0 4px;color:#1f2430">${t.shipTo}</h3>
-        <p style="margin:0;font-size:14px;line-height:1.6;color:#3a4150">
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#3a4150">
             ${escapeHtml(address.fullName)}<br>
             ${escapeHtml(address.phone)}<br>
             ${escapeHtml(formatAddress(order))}
@@ -390,7 +390,7 @@ function orderDetailsHtml(order: Order, t: Dictionary): string {
         ${
             order.note
                 ? `<h3 style="font-size:14px;margin:24px 0 4px;color:#1f2430">${t.note}</h3>
-                   <p style="margin:0;font-size:14px;line-height:1.6;color:#3a4150">${escapeHtml(order.note)}</p>`
+                   <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#3a4150">${escapeHtml(order.note)}</p>`
                 : ''
         }`;
 }
@@ -455,25 +455,40 @@ function formatAddress(order: Order): string {
 }
 
 // ---------------------------------------------------------------------------
-// Khung HTML — inline style vì nhiều trình đọc mail bỏ thẻ <style>
+// Khung HTML — inline style là chính vì nhiều trình đọc mail bỏ thẻ <style>. Thẻ
+// <style> chỉ để thu gọn khoảng đệm trên điện thoại (Gmail app, Apple Mail đọc được
+// media query theo class); trình đọc bỏ nó đi thì vẫn ra bố cục PC, chỉ rộng rãi hơn.
 // ---------------------------------------------------------------------------
+
+const MOBILE_CSS = `
+    @media only screen and (max-width:520px) {
+        .dc-outer { padding:8px 0 !important; }
+        .dc-card { border-radius:0 !important; }
+        .dc-head, .dc-foot { padding:14px 16px !important; }
+        .dc-body { padding:18px 16px !important; }
+        .dc-h1 { font-size:18px !important; }
+    }`;
 
 function layout(shop: ShopInfo, heading: string, blocks: string[]): string {
     return `<!doctype html>
 <html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku Gothic ProN','Segoe UI',Meiryo,Arial,sans-serif">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 12px">
-        <tr><td align="center">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden">
-                <tr><td style="background:#397dbb;padding:18px 24px;color:#ffffff;font-size:16px;font-weight:700">${escapeHtml(
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>${MOBILE_CSS}</style>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;-webkit-text-size-adjust:100%;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku Gothic ProN','Segoe UI',Meiryo,Arial,sans-serif">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7">
+        <tr><td class="dc-outer" align="center" style="padding:24px 12px">
+            <table class="dc-card" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden">
+                <tr><td class="dc-head" style="background:#397dbb;padding:18px 24px;color:#ffffff;font-size:16px;font-weight:700">${escapeHtml(
                     shop.name,
                 )}</td></tr>
-                <tr><td style="padding:24px">
-                    <h1 style="font-size:20px;margin:0 0 16px;color:#1f2430">${heading}</h1>
+                <tr><td class="dc-body" style="padding:24px">
+                    <h1 class="dc-h1" style="font-size:20px;line-height:1.4;margin:0 0 16px;color:#1f2430">${heading}</h1>
                     ${blocks.join('\n')}
                 </td></tr>
-                <tr><td style="padding:16px 24px;background:#fafbfc;border-top:1px solid #eceef2;font-size:12px;line-height:1.6;color:#7a8190">
+                <tr><td class="dc-foot" style="padding:16px 24px;background:#fafbfc;border-top:1px solid #eceef2;font-size:12px;line-height:1.6;color:#7a8190">
                     ${shopFooterHtml(shop)}
                 </td></tr>
             </table>
@@ -489,13 +504,18 @@ function paragraph(text: string, muted = false): string {
     }">${escapeHtml(text)}</p>`;
 }
 
+/**
+ * Cột nhãn rộng cố định (thuộc tính `width` + style): kiểu `width:1%` + `nowrap` cũ bị
+ * Gmail Android bóp lại khi màn hẹp, "注文番号" rơi thành mỗi chữ một dòng. 104px đủ
+ * cho nhãn dài nhất ("お支払い方法", "Điện thoại"); giá trị dài thì tự xuống dòng.
+ */
 function keyValueTable(rows: Array<[string, string]>): string {
-    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;background:#f7f9fc;border-radius:6px;margin:8px 0">
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;table-layout:fixed;font-size:14px;background:#f7f9fc;border-radius:6px;margin:8px 0">
         ${rows
             .map(
                 ([key, value]) => `<tr>
-            <td style="padding:8px 12px;color:#7a8190;white-space:nowrap;width:1%">${escapeHtml(key)}</td>
-            <td style="padding:8px 12px;color:#1f2430;font-weight:600">${escapeHtml(value)}</td>
+            <td width="104" style="width:104px;padding:8px 0 8px 12px;color:#7a8190;vertical-align:top;font-size:13px;line-height:1.5">${escapeHtml(key)}</td>
+            <td style="padding:8px 12px;color:#1f2430;font-weight:600;vertical-align:top;line-height:1.5;word-break:break-word;overflow-wrap:anywhere">${escapeHtml(value)}</td>
         </tr>`,
             )
             .join('')}
