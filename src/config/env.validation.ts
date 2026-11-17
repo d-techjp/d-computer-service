@@ -36,7 +36,6 @@ export const envValidationSchema = Joi.object({
     // Webhooks, hoặc từ `stripe listen` khi chạy local.
     STRIPE_SECRET_KEY: Joi.string().allow('').default(''),
     STRIPE_WEBHOOK_SECRET: Joi.string().allow('').default(''),
-    STRIPE_PAYMENT_METHOD_TYPES: Joi.string().default('card,paypay'),
     // Stripe chỉ nhận 30 phút -> 24 giờ
     STRIPE_CHECKOUT_EXPIRES_MINUTES: Joi.number().integer().min(30).max(1440).default(30),
     STRIPE_TERMINAL_READER_ID: Joi.string().allow('').default(''),

@@ -25,7 +25,7 @@ export class ClientStripeCheckoutController {
     @LogActivity({ action: ActivityAction.ORDER_PLACED, resource: 'order' })
     @ApiCreatedResponse({ type: StripeCheckoutResultDto })
     @ApiOperation({
-        summary: 'Đặt hàng và thanh toán bằng thẻ / PayPay (Stripe Checkout)',
+        summary: 'Đặt hàng và thanh toán online (Stripe Checkout)',
         description:
             'Tạo đơn `awaiting_payment` (chưa trừ kho) rồi trả `checkoutUrl` — FE chuyển ' +
             'hẳn trang sang URL này. Giỏ hàng CHƯA bị đóng: khách bấm quay lại trên Stripe ' +
@@ -46,7 +46,7 @@ export class ClientStripeCheckoutController {
         description:
             'Đồng bộ luôn với Stripe nếu webhook chưa tới, nên ngay sau khi trả tiền đơn ' +
             'đã là `pending` + `paid`. Vẫn `awaiting_payment` nghĩa là tiền chưa về ' +
-            '(hiếm, với thẻ/PayPay) — FE gọi lại sau vài giây.',
+            '(hiếm, với thẻ/ví điện tử) — FE gọi lại sau vài giây.',
     })
     session(@Param('sessionId') sessionId: string): Promise<StripeSessionStatusDto> {
         return this.stripeCheckoutService.syncSession(sessionId);

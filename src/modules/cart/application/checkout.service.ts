@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { AuthenticatedUser } from '../../../common/interfaces/authenticated-user.interface';
 import { OrdersService } from '../../orders/application/orders.service';
+import {
+    type EffectivePaymentMethods,
+    PaymentSettingsService,
+} from '../../payment-settings/application/payment-settings.service';
 import type { CreateOrderDto, ShippingAddressDto } from '../../orders/dto/create-order.dto';
 import type { Order } from '../../orders/entities/order.entity';
 import { DEFAULT_ORDER_LOCALE, PaymentMethod } from '../../orders/enums/order.enum';
@@ -24,7 +27,7 @@ export class CheckoutService {
     constructor(
         private readonly cartsService: CartsService,
         private readonly ordersService: OrdersService,
-        private readonly config: ConfigService,
+        private readonly paymentSettings: PaymentSettingsService,
     ) {}
 
     /**
@@ -33,7 +36,8 @@ export class CheckoutService {
      */
     async preview(dto: CheckoutPreviewDto, user?: AuthenticatedUser): Promise<CheckoutSummaryDto> {
         const cart = await this.loadCheckoutableCart(dto.cartId, user);
-        return this.buildPreview(cart, dto.shippingAddress);
+        const methods = await this.paymentSettings.effective();
+        return this.buildPreview(cart, dto.shippingAddress, methods);
     }
 
     /**
@@ -43,15 +47,17 @@ export class CheckoutService {
      */
     async placeOrder(dto: PlaceOrderDto, user?: AuthenticatedUser): Promise<Order> {
         if (dto.paymentMethod === PaymentMethod.STRIPE) {
-            throw new BadRequestException(
-                'Thanh toán bằng thẻ / PayPay dùng POST /checkout/stripe',
-            );
+            throw new BadRequestException('Thanh toán online dùng POST /checkout/stripe');
+        }
+        const paymentMethod = dto.paymentMethod ?? PaymentMethod.COD;
+        if (paymentMethod === PaymentMethod.COD) {
+            const { codEnabled } = await this.paymentSettings.effective();
+            if (!codEnabled) {
+                throw new BadRequestException('Cửa hàng tạm ngưng nhận thanh toán khi nhận hàng');
+            }
         }
 
-        const { cart, order } = await this.createOrderFromCart(
-            { ...dto, paymentMethod: dto.paymentMethod ?? PaymentMethod.COD },
-            user,
-        );
+        const { cart, order } = await this.createOrderFromCart({ ...dto, paymentMethod }, user);
 
         // Ngoài transaction đặt hàng: `OrdersUnitOfWork` là cửa duy nhất vào đó và
         // mở rộng nó chỉ để đóng giỏ là không đáng. Hỏng ở đây thì đơn vẫn đúng,
@@ -97,8 +103,7 @@ export class CheckoutService {
         // thông báo rõ ràng thay vì lỗi cụt lủn từ tầng đặt đơn. Không thay thế
         // được kiểm tra dưới khoá của `OrdersService` — hai người cùng mua món
         // cuối cùng thì vẫn phải có một người bị từ chối ở đó.
-        const preview = this.buildPreview(cart, dto.shippingAddress);
-        if (!preview.canPlaceOrder) {
+        if (toPublicCart(cart).hasBlockingIssues) {
             throw new BadRequestException(
                 'Giỏ hàng có sản phẩm không còn mua được — vui lòng kiểm tra lại giỏ hàng',
             );
@@ -136,17 +141,22 @@ export class CheckoutService {
     }
 
     /**
-     * Chỉ trả những phương thức đặt được thật: trước đây trả cả enum nên FE thấy
-     * `bank_transfer`/`e_wallet` dù backend không có luồng nào cho chúng. Stripe
-     * chỉ hiện khi đã cấu hình secret key.
+     * Chỉ trả những phương thức đặt được thật (bật trong admin Cài đặt → Thanh toán):
+     * trước đây trả cả enum nên FE thấy `bank_transfer`/`e_wallet` dù backend không
+     * có luồng nào cho chúng.
      */
-    private availablePaymentMethods(): PaymentMethod[] {
-        const methods = [PaymentMethod.COD];
-        if (this.config.get<string>('stripe.secretKey')) methods.push(PaymentMethod.STRIPE);
-        return methods;
+    private availablePaymentMethods(methods: EffectivePaymentMethods): PaymentMethod[] {
+        const available: PaymentMethod[] = [];
+        if (methods.codEnabled) available.push(PaymentMethod.COD);
+        if (methods.stripePaymentMethodTypes.length > 0) available.push(PaymentMethod.STRIPE);
+        return available;
     }
 
-    private buildPreview(cart: Cart, shippingAddress: ShippingAddressDto): CheckoutSummaryDto {
+    private buildPreview(
+        cart: Cart,
+        shippingAddress: ShippingAddressDto,
+        methods: EffectivePaymentMethods,
+    ): CheckoutSummaryDto {
         const view = toPublicCart(cart);
         const subtotal = view.subtotal;
 
@@ -157,7 +167,9 @@ export class CheckoutService {
             shippingFee: SHIPPING_FEE,
             total: Math.round((subtotal - DISCOUNT + SHIPPING_FEE) * 100) / 100,
             shippingAddress,
-            paymentMethods: this.availablePaymentMethods(),
+            paymentMethods: this.availablePaymentMethods(methods),
+            stripePaymentMethodTypes: methods.stripePaymentMethodTypes,
+            stripeCardInstallments: methods.cardInstallmentsEnabled,
             canPlaceOrder: !view.hasBlockingIssues,
         };
     }

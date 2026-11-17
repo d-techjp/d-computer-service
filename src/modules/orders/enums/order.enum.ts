@@ -26,7 +26,7 @@ export enum PaymentMethod {
     BANK_TRANSFER = 'bank_transfer',
     CREDIT_CARD = 'credit_card',
     E_WALLET = 'e_wallet',
-    /** Stripe Checkout — khách chọn thẻ hoặc PayPay ngay trên trang của Stripe. */
+    /** Stripe Checkout — khách chọn thẻ / ví / trả góp ngay trên trang của Stripe. */
     STRIPE = 'stripe',
     /** Quẹt/chạm thẻ trên máy POS Stripe Terminal tại quầy — chỉ dùng cho đơn `in_store`. */
     STRIPE_TERMINAL = 'stripe_terminal',

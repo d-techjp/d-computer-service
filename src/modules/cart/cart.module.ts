@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrdersModule } from '../orders/orders.module';
+import { PaymentSettingsModule } from '../payment-settings/payment-settings.module';
 import { ProductsModule } from '../products/products.module';
 import { CartsService } from './application/carts.service';
 import { CheckoutService } from './application/checkout.service';
@@ -20,7 +21,12 @@ import { TypeOrmCartsRepository } from './infrastructure/typeorm-carts.repositor
  * `payments` đứng trên cart (dùng `CheckoutService` để tạo đơn chờ thanh toán).
  */
 @Module({
-    imports: [TypeOrmModule.forFeature([Cart, CartItem]), ProductsModule, OrdersModule],
+    imports: [
+        TypeOrmModule.forFeature([Cart, CartItem]),
+        ProductsModule,
+        OrdersModule,
+        PaymentSettingsModule,
+    ],
     controllers: [ClientCartsController, ClientCheckoutController],
     providers: [
         CartsService,

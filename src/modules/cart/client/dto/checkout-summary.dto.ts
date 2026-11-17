@@ -36,6 +36,18 @@ export class CheckoutSummaryDto {
     @ApiProperty({ enum: PaymentMethod, isArray: true })
     paymentMethods: PaymentMethod[];
 
+    @ApiProperty({
+        type: [String],
+        example: ['card'],
+        description:
+            'Loại Stripe đang bật khi chọn `stripe` (admin Cài đặt → Thanh toán). `card` gồm ' +
+            'thẻ (JCB…), Apple Pay, Google Pay; rỗng khi Stripe tắt hoặc chưa cấu hình',
+    })
+    stripePaymentMethodTypes: string[];
+
+    @ApiProperty({ description: 'Thẻ tín dụng Nhật được chọn trả góp trên trang Stripe' })
+    stripeCardInstallments: boolean;
+
     @ApiProperty({ description: 'false khi có dòng không còn mua được → FE khoá nút đặt hàng' })
     canPlaceOrder: boolean;
 }

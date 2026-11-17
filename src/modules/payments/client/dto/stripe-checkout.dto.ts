@@ -4,7 +4,7 @@ import { OrderStatus, PaymentStatus } from '../../../orders/enums/order.enum';
 
 /**
  * Giống `PlaceOrderDto` nhưng không có `paymentMethod` (luôn là Stripe; khách
- * chọn thẻ hay PayPay trên trang của Stripe).
+ * chọn thẻ / ví / trả góp trên trang của Stripe).
  *
  * URL quay về do server tự dựng từ `storefront.url`, không bao giờ nhận từ
  * client: cho khách tự gửi URL là mở cửa cho open redirect qua chính trang

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CartModule } from '../cart/cart.module';
 import { OrdersModule } from '../orders/orders.module';
+import { PaymentSettingsModule } from '../payment-settings/payment-settings.module';
 import { UsersModule } from '../users/users.module';
 import { AdminPosController } from './admin/admin-pos.controller';
 import { PosTerminalService } from './application/pos-terminal.service';
@@ -21,7 +22,7 @@ import { StripeWebhookController } from './stripe-webhook.controller';
  * dựng link từ `order.stripePaymentIntentId`.
  */
 @Module({
-    imports: [OrdersModule, CartModule, UsersModule],
+    imports: [OrdersModule, CartModule, UsersModule, PaymentSettingsModule],
     controllers: [ClientStripeCheckoutController, StripeWebhookController, AdminPosController],
     providers: [StripeGateway, StripeCheckoutService, PosTerminalService],
 })

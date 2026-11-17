@@ -43,12 +43,6 @@ export const configuration = () => ({
     stripe: {
         secretKey: process.env.STRIPE_SECRET_KEY ?? '',
         webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
-        // Phải bật đúng các phương thức này trong Stripe Dashboard > Settings > Payment methods,
-        // nếu không Stripe từ chối tạo Checkout Session
-        paymentMethodTypes: (process.env.STRIPE_PAYMENT_METHOD_TYPES ?? 'card,paypay')
-            .split(',')
-            .map((type) => type.trim())
-            .filter(Boolean),
         checkoutExpiresMinutes: toInt(process.env.STRIPE_CHECKOUT_EXPIRES_MINUTES, 30),
         // Máy POS mặc định của màn bán tại quầy (`tmr_...`). Để trống thì nhân viên chọn máy.
         terminalReaderId: process.env.STRIPE_TERMINAL_READER_ID ?? '',

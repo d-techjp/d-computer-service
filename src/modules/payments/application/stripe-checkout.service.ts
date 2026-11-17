@@ -6,6 +6,10 @@ import { CheckoutService } from '../../cart/application/checkout.service';
 import { OrdersService } from '../../orders/application/orders.service';
 import type { Order } from '../../orders/entities/order.entity';
 import { PaymentStatus } from '../../orders/enums/order.enum';
+import {
+    type EffectivePaymentMethods,
+    PaymentSettingsService,
+} from '../../payment-settings/application/payment-settings.service';
 import type { OrderLocale } from '../../orders/enums/order.enum';
 import type {
     StripeCheckoutDto,
@@ -13,6 +17,7 @@ import type {
     StripeSessionStatusDto,
 } from '../client/dto/stripe-checkout.dto';
 import { StripeGateway } from '../infrastructure/stripe.gateway';
+import { paymentMethodOptionsFor } from './stripe-payment-methods';
 
 /** Cửa hàng bán ở Nhật, tài khoản Stripe ở Nhật — JPY là tiền tệ duy nhất. */
 const CURRENCY = 'jpy';
@@ -36,7 +41,6 @@ const CURRENCY = 'jpy';
 @Injectable()
 export class StripeCheckoutService {
     private readonly logger = new Logger(StripeCheckoutService.name);
-    private readonly paymentMethodTypes: string[];
     private readonly expiresMinutes: number;
     private readonly storefrontUrl: string;
 
@@ -44,12 +48,9 @@ export class StripeCheckoutService {
         private readonly stripe: StripeGateway,
         private readonly checkoutService: CheckoutService,
         private readonly ordersService: OrdersService,
+        private readonly paymentSettings: PaymentSettingsService,
         configService: ConfigService,
     ) {
-        this.paymentMethodTypes = configService.get<string[]>('stripe.paymentMethodTypes', [
-            'card',
-            'paypay',
-        ]);
         this.expiresMinutes = configService.get<number>('stripe.checkoutExpiresMinutes', 30);
         this.storefrontUrl = configService.get<string>('storefront.url', '');
     }
@@ -59,12 +60,17 @@ export class StripeCheckoutService {
         user?: AuthenticatedUser,
     ): Promise<StripeCheckoutResultDto> {
         this.stripe.assertConfigured();
+        // Đọc trước khi tạo đơn: admin tắt hết phương thức Stripe thì không sinh đơn rác
+        const methods = await this.paymentSettings.effective();
+        if (methods.stripePaymentMethodTypes.length === 0) {
+            throw new BadRequestException('Cửa hàng tạm ngưng nhận thanh toán online');
+        }
         const order = await this.checkoutService.placeOrderAwaitingPayment(dto, user);
 
         let session: Stripe.Checkout.Session;
         try {
             session = await this.stripe.createCheckoutSession(
-                this.buildSessionParams(order, dto.cartId),
+                this.buildSessionParams(order, dto.cartId, methods),
                 `checkout-session-${order.id}`,
             );
         } catch (error) {
@@ -180,7 +186,11 @@ export class StripeCheckoutService {
         await this.ordersService.cancelUnpaid(orderId, reason, paymentStatus);
     }
 
-    private buildSessionParams(order: Order, cartId: string): Stripe.Checkout.SessionCreateParams {
+    private buildSessionParams(
+        order: Order,
+        cartId: string,
+        methods: EffectivePaymentMethods,
+    ): Stripe.Checkout.SessionCreateParams {
         const locale: OrderLocale = order.locale;
         // Storefront chỉ còn tiếng Nhật, URL không có tiền tố ngôn ngữ nữa.
         // (Link `/ja/...` cũ vẫn chạy nhờ redirect 301 ở storefront.)
@@ -190,7 +200,8 @@ export class StripeCheckoutService {
         return {
             mode: 'payment',
             currency: CURRENCY,
-            payment_method_types: this.paymentMethodTypes,
+            payment_method_types: methods.stripePaymentMethodTypes,
+            payment_method_options: paymentMethodOptionsFor(methods.cardInstallmentsEnabled),
             line_items: this.buildLineItems(order),
             client_reference_id: order.id,
             metadata,

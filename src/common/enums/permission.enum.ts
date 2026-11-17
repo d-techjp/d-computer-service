@@ -140,7 +140,7 @@ export const PERMISSION_CATALOG: readonly PermissionDefinition[] = [
         code: PermissionCode.SETTINGS_MANAGE,
         name: 'Quản lý cài đặt hệ thống',
         module: 'system',
-        description: 'Sửa cấu hình vận hành: hộp thư nhận email báo đơn mới',
+        description: 'Sửa cấu hình vận hành: hộp thư báo đơn mới, phương thức thanh toán',
     },
 ];
 
