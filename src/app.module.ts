@@ -16,6 +16,7 @@ import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module
 import { ArticlesModule } from './modules/articles/articles.module';
 import { NotificationSettingsModule } from './modules/notification-settings/notification-settings.module';
 import { PaymentSettingsModule } from './modules/payment-settings/payment-settings.module';
+import { CustomerAddressesModule } from './modules/customer-addresses/customer-addresses.module';
 import { PagesModule } from './modules/pages/pages.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BrandsModule } from './modules/brands/brands.module';
@@ -70,6 +71,7 @@ import { RedisModule } from './redis/redis.module';
         SiteSettingsModule,
         NotificationSettingsModule,
         PaymentSettingsModule,
+        CustomerAddressesModule,
         ArticlesModule,
         PagesModule,
         OrdersModule,
