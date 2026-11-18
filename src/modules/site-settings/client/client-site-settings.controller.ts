@@ -12,7 +12,8 @@ export class ClientSiteSettingsController {
 
     @Get()
     @ApiOperation({
-        summary: 'Thông tin cửa hàng cho footer — tên, hotline, địa chỉ, link mạng xã hội',
+        summary:
+            'Thông tin cửa hàng cho footer — tên, số di động + hotline, địa chỉ, link mạng xã hội',
     })
     findOne(): Promise<PublicSiteSettingsDto> {
         return this.clientSiteSettingsService.find();

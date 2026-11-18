@@ -30,13 +30,20 @@ export class UpdateSiteSettingsDto {
     @IsOptional()
     companyName?: string;
 
-    @ApiPropertyOptional({ example: '080-6473-2260' })
+    @ApiPropertyOptional({ example: '080-6473-2260', description: 'Số di động' })
     @Transform(toTrimmed)
     @IsString()
     @MinLength(1)
     @MaxLength(50)
     @IsOptional()
     phone?: string;
+
+    @ApiPropertyOptional({ example: '06-1234-5678', description: 'Gửi chuỗi rỗng để xoá' })
+    @Transform(toTrimmed)
+    @IsString()
+    @MaxLength(50)
+    @IsOptional()
+    hotline?: string;
 
     @ApiPropertyOptional({ example: '大阪市西成区玉出東１－３－１６ ドエル１番館103号' })
     @Transform(toTrimmed)

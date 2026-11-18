@@ -9,12 +9,14 @@ import {
     buildOrderPlacedMail,
     buildOrderStatusMail,
     buildShopNewOrderMail,
+    shopPhoneLine,
     type ShopInfo,
 } from './order-mail.templates';
 
 const shop: ShopInfo = {
     name: 'ディーテック株式会社',
-    phone: '03-0000-0000',
+    phone: '080-0000-0000',
+    hotline: '06-0000-0000',
     address: 'Tokyo',
     email: 'support@example.com',
 };
@@ -145,5 +147,14 @@ describe('order mail templates', () => {
         const noEmail = buildOrderPlacedMail(makeOrder(), { ...shop, email: '' });
         expect(noEmail.text).not.toContain('support@example.com');
         expect(noEmail.html).not.toContain('<br><br>');
+    });
+
+    it('footer in cả hotline lẫn di động, thiếu số nào thì bỏ nhãn số đó', () => {
+        expect(buildOrderPlacedMail(makeOrder(), shop).text).toContain(
+            'TEL 06-0000-0000 / 携帯 080-0000-0000',
+        );
+        expect(shopPhoneLine({ phone: '080-0000-0000', hotline: '' })).toBe('TEL 080-0000-0000');
+        expect(shopPhoneLine({ phone: '', hotline: '06-0000-0000' })).toBe('TEL 06-0000-0000');
+        expect(shopPhoneLine({ phone: '', hotline: '' })).toBe('');
     });
 });

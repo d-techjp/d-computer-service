@@ -4,7 +4,9 @@ import { FooterColumn, SiteSettings, SocialLink } from '../../entities/site-sett
 /** Bản thông tin cửa hàng dành cho storefront — không có `id`/`createdAt`/`updatedAt` (chuyện quản trị). */
 export class PublicSiteSettingsDto {
     @ApiProperty({ example: 'D-TECH' }) companyName: string;
-    @ApiProperty({ example: '080-6473-2260' }) phone: string;
+    @ApiProperty({ example: '080-6473-2260', description: 'Số di động' }) phone: string;
+    @ApiProperty({ example: '06-1234-5678', description: 'Rỗng = chưa có hotline' })
+    hotline: string;
     @ApiProperty({ example: '大阪市西成区玉出東１－３－１６ ドエル１番館103号' }) address: string;
     @ApiProperty({ example: 'support@d-techjp.com' }) supportEmail: string;
     @ApiProperty({ type: () => [SocialLink] }) socialLinks: SocialLink[];
@@ -14,6 +16,7 @@ export class PublicSiteSettingsDto {
 export const toPublicSiteSettings = (settings: SiteSettings): PublicSiteSettingsDto => ({
     companyName: settings.companyName,
     phone: settings.phone,
+    hotline: settings.hotline,
     address: settings.address,
     supportEmail: settings.supportEmail,
     socialLinks: settings.socialLinks,

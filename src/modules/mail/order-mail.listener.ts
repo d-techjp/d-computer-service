@@ -107,6 +107,7 @@ export class OrderMailListener {
         return {
             name: settings.companyName,
             phone: settings.phone,
+            hotline: settings.hotline,
             address: settings.address,
             email: settings.supportEmail,
         };

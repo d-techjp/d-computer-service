@@ -20,6 +20,7 @@ export class SiteSettingsService {
             this.siteSettingsRepository.create({
                 companyName: '',
                 phone: '',
+                hotline: '',
                 address: '',
                 supportEmail: '',
                 socialLinks: [],

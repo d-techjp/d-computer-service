@@ -31,6 +31,7 @@ export class OrderReceiptService {
             shop: {
                 name: settings.companyName,
                 phone: settings.phone,
+                hotline: settings.hotline,
                 address: settings.address,
                 invoiceRegistrationNumber: settings.invoiceRegistrationNumber || null,
             },

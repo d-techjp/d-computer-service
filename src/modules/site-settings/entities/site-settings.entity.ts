@@ -61,9 +61,16 @@ export class SiteSettings extends BaseEntity {
     @Column({ type: 'varchar', length: 150, default: '' })
     companyName: string;
 
-    @ApiProperty({ example: '080-6473-2260', description: 'Hotline liên hệ hiển thị ở footer' })
+    @ApiProperty({ example: '080-6473-2260', description: 'Số di động của cửa hàng' })
     @Column({ type: 'varchar', length: 50, default: '' })
     phone: string;
+
+    @ApiProperty({
+        example: '06-1234-5678',
+        description: 'Hotline (số cố định / tổng đài). Rỗng = chưa có, chỉ hiện số di động',
+    })
+    @Column({ type: 'varchar', length: 50, default: '' })
+    hotline: string;
 
     @ApiProperty({ example: '大阪市西成区玉出東１－３－１６ ドエル１番館103号' })
     @Column({ type: 'varchar', length: 500, default: '' })

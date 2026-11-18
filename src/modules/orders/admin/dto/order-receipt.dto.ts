@@ -5,8 +5,11 @@ export class ReceiptShopDto {
     @ApiProperty({ example: 'D-TECH' })
     name: string;
 
-    @ApiProperty({ example: '080-6473-2260' })
+    @ApiProperty({ example: '080-6473-2260', description: 'Số di động' })
     phone: string;
+
+    @ApiProperty({ example: '06-1234-5678', description: 'Rỗng = chưa có hotline' })
+    hotline: string;
 
     @ApiProperty({ example: '大阪市西成区玉出東１－３－１６ ドエル１番館103号' })
     address: string;

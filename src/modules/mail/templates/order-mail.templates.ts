@@ -11,7 +11,10 @@ const TIME_ZONE = 'Asia/Tokyo';
 
 export interface ShopInfo {
     name: string;
+    /** Số di động. */
     phone: string;
+    /** Hotline — rỗng thì chỉ in số di động. */
+    hotline: string;
     address: string;
     /** Email hỗ trợ — rỗng thì không in. */
     email: string;
@@ -530,15 +533,25 @@ function button(label: string, url: string): string {
     )}</a></p>`;
 }
 
+/**
+ * Một dòng số liên lạc kiểu danh thiếp Nhật: hotline đứng trước vì là số chính,
+ * di động gắn nhãn 携帯. Không có hotline thì in số di động như trước.
+ */
+export function shopPhoneLine(shop: Pick<ShopInfo, 'phone' | 'hotline'>): string {
+    if (shop.hotline && shop.phone) return `TEL ${shop.hotline} / 携帯 ${shop.phone}`;
+    const only = shop.hotline || shop.phone;
+    return only ? `TEL ${only}` : '';
+}
+
 function shopFooterHtml(shop: ShopInfo): string {
-    return [shop.name, shop.phone, shop.email, shop.address]
+    return [shop.name, shopPhoneLine(shop), shop.email, shop.address]
         .filter(Boolean)
         .map((line) => escapeHtml(line))
         .join('<br>');
 }
 
 function shopFooterText(shop: ShopInfo): string {
-    const lines = [shop.name, shop.phone, shop.email, shop.address].filter(Boolean);
+    const lines = [shop.name, shopPhoneLine(shop), shop.email, shop.address].filter(Boolean);
     return lines.length > 0 ? ['', '--', ...lines].join('\n') : '';
 }
 
